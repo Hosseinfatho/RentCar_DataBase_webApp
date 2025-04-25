@@ -282,6 +282,43 @@ def get_top_k_clients():
         cur.close()
         conn.close()
 
+@app.route('/api/managers/reports/model-rents', methods=['GET'])
+@jwt_required()
+def get_model_rent_counts():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to count rents per car model (Make, Model, Year)
+        # Left Join CAR with RENT to include cars that have never been rented (count will be 0)
+        query = """
+            SELECT 
+                c.MAKE AS make, 
+                c.MODEL AS model, 
+                c.YEAR AS year, 
+                COUNT(r.RENTID) AS rent_count
+            FROM CAR c
+            LEFT JOIN RENT r ON c.CARID = r.CARID
+            GROUP BY c.MAKE, c.MODEL, c.YEAR
+            ORDER BY c.MAKE, c.MODEL, c.YEAR; 
+        """
+        cur.execute(query)
+        model_counts = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        report_list = [dict(model) for model in model_counts]
+
+        return jsonify({"model_rent_report": report_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching model rent counts: {e}")
+        return jsonify({"error": f"Failed to fetch model rent counts: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/api/managers/drivers', methods=['POST'])
 @jwt_required()
 def add_driver():
