@@ -158,4 +158,322 @@
   .sub-action h4 { color: #555; }
   .results { background-color: #f0f0f0; }
   .component-content h2 { border-bottom-color: #eee; }
+}
+
+:root {
+  /* Define color palette and spacing using CSS Variables */
+  --primary-color: #007bff; /* Example primary color */
+  --primary-color-dark: #0056b3;
+  --secondary-color: #6c757d;
+  --success-color: #28a745;
+  --error-color: #dc3545;
+  --background-color-light: #f8f9fa;
+  --background-color-dark: #343a40;
+  --text-color-light: #212529;
+  --text-color-dark: #f8f9fa;
+  --border-color-light: #dee2e6;
+  --border-color-dark: #495057;
+  --input-bg-light: #fff;
+  --input-bg-dark: #495057;
+  --results-bg-light: #e9ecef;
+  --results-bg-dark: #495057;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  --border-radius: 4px;
+  --box-shadow-light: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --box-shadow-dark: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  color: var(--text-color-light);
+  background-color: var(--background-color-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: var(--text-color-dark);
+    background-color: var(--background-color-dark);
+  }
+}
+
+/* --- Component Layout --- */
+.section {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.image-container {
+  width: 100%;
+  max-height: 200px; /* Limit image height */
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.component-content {
+  padding: var(--spacing-lg);
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.component-content h2 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--border-color-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .component-content h2 {
+    border-bottom-color: var(--border-color-dark);
+  }
+}
+
+/* --- Action Sections --- */
+.action-section {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  background-color: var(--input-bg-light); /* Slight background */
+  box-shadow: var(--box-shadow-light);
+}
+
+.action-section:first-of-type {
+    margin-top: var(--spacing-lg); /* Less margin for the first section */
+}
+
+.action-section h3 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-lg);
+  font-size: 1.2em;
+  color: var(--primary-color);
+}
+
+.sub-action {
+  margin-bottom: var(--spacing-lg);
+}
+
+.sub-action:last-child {
+    margin-bottom: 0;
+}
+
+.sub-action h4 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+  font-size: 1.05em;
+  font-weight: 600; /* Bolder subheading */
+  color: var(--secondary-color);
+}
+
+/* --- Forms & Controls --- */
+.controls {
+  display: flex;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.controls.stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.controls input[type="text"],
+.controls input[type="email"],
+.controls input[type="password"],
+.controls input[type="number"],
+.controls select {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  background-color: var(--input-bg-light);
+  color: var(--text-color-light);
+  font-size: 1em;
+  flex-grow: 1; /* Allow input to grow */
+  min-width: 150px; /* Minimum width */
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.controls.stacked input,
+.controls.stacked select {
+    margin-bottom: var(--spacing-sm); /* Space below stacked inputs */
+}
+
+/* Input focus state */
+.controls input:focus,
+.controls select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Subtle focus ring */
+}
+
+/* --- Buttons --- (Assuming global button styles exist, add specifics here) */
+/* If no global styles, define base button style here */
+/* .controls button, button { ... } */
+
+.controls button {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  /* Inherit global button styles or define here */
+   /* Example specific style if needed */
+   /* background-color: var(--primary-color); */
+   /* color: white; */
+   /* border: none; */
+   /* border-radius: var(--border-radius); */
+   /* cursor: pointer; */
+   /* transition: background-color 0.2s ease; */
+}
+
+/*
+.controls button:hover {
+   background-color: var(--primary-color-dark);
+}
+*/
+
+.controls.stacked button {
+    margin-top: var(--spacing-sm);
+    width: auto; /* Allow button to size naturally */
+    align-self: flex-start; /* Align button left in stacked layout */
+}
+
+.controls div /* Button group */ {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+
+/* --- Results & Messages --- */
+.results {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background-color: var(--results-bg-light);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  font-size: 0.95em;
+}
+
+.results h4 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+}
+
+.results ul {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+}
+.results li {
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Message Styling */
+.message {
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-md);
+  border-radius: var(--border-radius);
+  border: 1px solid transparent;
+  font-weight: 500;
+}
+
+.message.success {
+  color: #155724;
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+}
+
+.message.error {
+  color: #721c24;
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+}
+
+/* --- Table Styling --- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--spacing-md);
+}
+
+table th,
+table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+table th {
+  font-weight: 600;
+  background-color: var(--results-bg-light);
+}
+
+table tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.05); /* Subtle hover */
+}
+
+/* --- Dark Mode Adjustments --- */
+@media (prefers-color-scheme: dark) {
+  .action-section {
+    border-color: var(--border-color-dark);
+    background-color: var(--background-color-dark); /* Darker section background */
+    box-shadow: var(--box-shadow-dark);
+  }
+  .sub-action h4 { color: #adb5bd; }
+
+  .controls input[type="text"],
+  .controls input[type="email"],
+  .controls input[type="password"],
+  .controls input[type="number"],
+  .controls select {
+      background-color: var(--input-bg-dark);
+      border-color: var(--border-color-dark);
+      color: var(--text-color-dark);
+  }
+
+  .controls input:focus,
+  .controls select:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.35);
+  }
+
+  .results {
+      background-color: var(--results-bg-dark);
+      border-color: var(--border-color-dark);
+  }
+  .results h4 {
+    color: var(--text-color-dark);
+  }
+
+  table th,
+  table td {
+      border-bottom: 1px solid var(--border-color-dark);
+  }
+  table th {
+      background-color: #495057; /* Slightly different dark bg for header */
+  }
+  table tbody tr:hover {
+      background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .message.success {
+      color: #d4edda;
+      background-color: #1c4a2a;
+      border-color: #2a6a3d;
+  }
+  .message.error {
+      color: #f8d7da;
+      background-color: #6e2a31;
+      border-color: #a83c46;
+  }
 } 
