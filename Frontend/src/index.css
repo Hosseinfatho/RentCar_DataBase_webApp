@@ -111,12 +111,15 @@ button:focus-visible {
 
 .section {
   border: 1px solid #ccc;
-  padding: 20px; 
+  /* padding: 20px; /* REMOVED - Moved to .component-content */
   flex: 1; 
   box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
   background-color: #ffffff; 
   box-sizing: border-box; 
-  overflow-y: auto; /* Add scroll if content overflows vertically */
+  /* overflow-y: auto; /* REMOVED - Moved to .component-content */
+  /* ADDED flex properties from component.css */
+  display: flex;
+  flex-direction: column; 
 }
 
 /* Remove border from the last section if added */

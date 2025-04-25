@@ -1,0 +1,48 @@
+/* Styles for component image layout */
+
+.section {
+  /* Make section a flex container to position image container and content */
+  display: flex;
+  flex-direction: column; 
+  padding: 0; /* Remove main padding if needed, apply to content instead */
+}
+
+.image-container {
+  width: 100%;
+  height: 30%; /* Set height to 20% of the section's height */
+  overflow: hidden; /* Hide parts of image that don't fit */
+  flex-shrink: 0; /* Prevent image container from shrinking */
+}
+
+.image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Scale image nicely to cover the container */
+  display: block; /* Remove extra space below image */
+}
+
+.component-content {
+  padding: 20px; /* Add padding to the content area below image */
+  flex-grow: 1; /* Allow content area to fill remaining space */
+  overflow-y: auto; /* Add scroll to content if needed */
+}
+
+/* Reset h2 margin as it's now inside component-content */
+.component-content h2 {
+   margin-top: 0;
+   border-bottom: 2px solid #eee; /* Keep border */
+   padding-bottom: 10px; /* Keep padding */
+   /* Inherit colors from theme adjustments */
+}
+
+/* Adjust theme colors if needed */
+@media (prefers-color-scheme: dark) {
+  .component-content h2 {
+    border-bottom-color: #444;
+  }
+}
+@media (prefers-color-scheme: light) {
+  .component-content h2 {
+    border-bottom-color: #eee;
+  }
+} 
