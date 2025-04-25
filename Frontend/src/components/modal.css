@@ -1,0 +1,77 @@
+/* Style for the About button */
+.about-button {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  z-index: 10;
+  padding: 8px 15px;
+  cursor: pointer; /* Add cursor */
+  border-radius: 4px; /* Add border radius */
+  border: 1px solid transparent; /* Add border like other buttons */
+  font-weight: 500; /* Match other buttons */
+  /* Make button blue */
+  background-color: #007bff; /* A standard blue */
+  color: white;
+  transition: background-color 0.2s ease;
+}
+
+.about-button:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Styles for the Modal */
+.modal-overlay {
+  position: fixed; /* Stay in place even when scrolling */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000; /* Ensure it's on top */
+}
+
+.modal-content {
+  background-color: #fff; /* Default white background */
+  padding: 30px;
+  border-radius: 8px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #333; /* Default text color for light mode */
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333; /* Ensure heading color is visible */
+}
+
+.modal-content p {
+  line-height: 1.6;
+  margin-bottom: 20px;
+  font-size: 0.9em; /* Make font slightly smaller */
+  text-align: justify; /* Justify the paragraph text */
+}
+
+.modal-close-button {
+  display: block; /* Make it a block element */
+  margin: 20px auto 0 auto; /* Center the button */
+  padding: 10px 20px;
+  /* Inherit base button styles or customize */
+}
+
+/* Dark theme adjustments for modal */
+@media (prefers-color-scheme: dark) {
+  .modal-content {
+    background-color: #3a3a3a;
+    color: #eee;
+  }
+  .modal-content h2 {
+    color: #eee;
+  }
+} 
