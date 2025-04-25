@@ -5,8 +5,18 @@ import psycopg2.extras # Needed for dictionary cursor
 import os
 from dotenv import load_dotenv
 import uuid
+# --- JWT Imports ---
+from flask_jwt_extended import create_access_token, jwt_required, JWTManager
+
 load_dotenv()
 app=Flask(__name__)
+
+# --- JWT Configuration ---
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") # Load secret key from .env
+if not app.config["JWT_SECRET_KEY"]:
+    raise ValueError("No JWT_SECRET_KEY set in environment variables")
+jwt = JWTManager(app)
+
 CORS(app)
 def get_db_connection():
   try:
@@ -83,7 +93,10 @@ def login_manager():
       if manager:
         # The keys in manager_dict will now be lowercase ('name', 'ssn', 'email') due to aliasing
         manager_dict=dict(manager)
-        return jsonify({"message": "login_success", "manager": manager_dict}), 200
+        # --- Generate JWT Token --- Use SSN as the identity
+        access_token = create_access_token(identity=ssn)
+        # --- Return token along with success message and manager info ---
+        return jsonify(access_token=access_token, manager=manager_dict, message="Login successful"), 200
       else:
          return jsonify({"error": "Invalid ssn"}), 401
    except Exception as e:
@@ -92,11 +105,18 @@ def login_manager():
    finally:
       cur.close()
       conn.close()
-      
+  ########################################################################
 # --- Car Management Routes ---
 
 @app.route('/api/managers/cars', methods=['POST'])
+@jwt_required() # Protect this route
 def add_car():
+    # Authentication check is now handled by @jwt_required()
+    # We can get the identity of the logged-in manager if needed:
+    # from flask_jwt_extended import get_jwt_identity
+    # current_manager_ssn = get_jwt_identity()
+    # print(f"Request by manager SSN: {current_manager_ssn}")
+
     # TODO: Add authentication check to ensure only logged-in managers can access
     data = request.get_json()
     make = data.get('make')
@@ -117,8 +137,7 @@ def add_car():
 
     cur = conn.cursor()
     try:
-        # Generate a unique CARID (using first 10 chars of UUID hex)
-        # Loop to ensure uniqueness, though collision is highly unlikely
+
         while True:
             car_id = uuid.uuid4().hex[:10].upper() # CARID is VARCHAR(10)
             cur.execute("SELECT CARID FROM CAR WHERE CARID = %s", (car_id,))
@@ -143,8 +162,9 @@ def add_car():
         conn.close()
 
 @app.route('/api/managers/cars/remove', methods=['POST'])
+@jwt_required() # Protect this route
 def remove_car():
-    # TODO: Add authentication check
+    # Authentication check handled by @jwt_required()
     data = request.get_json()
     make = data.get('make')
     model = data.get('model')
@@ -175,11 +195,6 @@ def remove_car():
             return jsonify({"error": "No car found matching the criteria"}), 404 # Not Found
 
         car_id_to_delete = car_to_delete[0]
-
-        # --- IMPORTANT: Check for Foreign Key Constraints ---
-        # Before deleting from CAR, we MUST check if this CARID is used in MODEL, RENT, or DRIVES tables.
-        # Deleting it directly will cause a foreign key violation error if it's referenced.
-
         # Check MODEL table
         cur.execute("SELECT 1 FROM MODEL WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
         if cur.fetchone():
@@ -214,6 +229,173 @@ def remove_car():
     finally:
         cur.close()
         conn.close()
+
+# --- Reports Routes --- (Protected Route)
+
+@app.route('/api/managers/reports/top-clients', methods=['GET'])
+@jwt_required()
+
+########################################################################
+# --- Driver Management Routes ---
+def get_top_k_clients():
+    k_str = request.args.get('k') # Get k from query parameters (?k=...) 
+
+    if not k_str:
+        return jsonify({"error": "Missing query parameter 'k'"}), 400
+    
+    try:
+        k = int(k_str)
+        if k <= 0:
+             raise ValueError("k must be positive")
+    except ValueError:
+        return jsonify({"error": "Invalid value for 'k', must be a positive integer"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    # Use dictionary cursor to get results as dicts
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to count rents per client, order by count descending, limit by k
+        # Joining RENT and CLIENT tables on EMAIL
+        query = """
+            SELECT c.NAME AS name, c.EMAIL AS email, COUNT(r.RENTID) AS rent_count
+            FROM CLIENT c
+            JOIN RENT r ON c.EMAIL = r.EMAIL
+            GROUP BY c.NAME, c.EMAIL
+            ORDER BY rent_count DESC
+            LIMIT %s;
+        """
+        cur.execute(query, (k,))
+        top_clients = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        clients_list = [dict(client) for client in top_clients]
+
+        return jsonify({"clients": clients_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching top clients: {e}")
+        return jsonify({"error": f"Failed to fetch top clients: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/managers/drivers', methods=['POST'])
+@jwt_required()
+def add_driver():
+    data = request.get_json()
+    name = data.get('name')
+    roadname = data.get('roadname')
+    number = data.get('number')
+    city = data.get('city')
+    zipcode = data.get('zipcode') # Optional based on schema, but good practice
+
+    if not name or not roadname or not number or not city:
+        # Zipcode might be optional depending on needs, but let's require it here
+        return jsonify({"error": "Missing required fields (name, roadname, number, city, zipcode)"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error":"Database connection faild"}), 500 #internal server error
+
+    cur = conn.cursor()
+    try:
+        # Step 1: Upsert Address (Insert if not exists, do nothing if exists)
+        # Use the correct ON CONFLICT clause based on the primary key (ROADNAME, NUMBER, CITY)
+        address_upsert_query = """
+            INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (ROADNAME, NUMBER, CITY) DO NOTHING;
+        """
+        cur.execute(address_upsert_query, (roadname, number, city, zipcode))
+
+        # Step 2: Insert Driver (Corrected INSERT statement)
+        driver_insert_query = """
+            INSERT INTO DRIVER (NAME, ROADNAME, NUMBER, CITY)
+            VALUES (%s, %s, %s, %s);
+        """
+        cur.execute(driver_insert_query, (name, roadname, number, city))
+
+        conn.commit()
+        return jsonify({"message": "Driver added successfully"}), 201
+
+    except psycopg2.errors.UniqueViolation as e:
+        conn.rollback()
+        # Check if it's a violation on the DRIVER table (name)
+        # Use the clearer error message from previous version
+        if 'driver_pkey' in str(e).lower() or 'driver_name_key' in str(e).lower():
+             return jsonify({"error": f"Driver with name '{name}' already exists"}), 409
+        else:
+             print(f"Unique violation error adding driver: {e}")
+             return jsonify({"error": f"Failed to add driver due to unique constraint: {e}"}), 409
+
+    except Exception as e:
+        conn.rollback()
+        # Use the clearer error message from previous version
+        print(f"Error adding driver: {e}")
+        return jsonify({"error": f"Failed to add driver: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/managers/drivers/remove', methods=['POST'])
+@jwt_required()
+def remove_driver():
+    data = request.get_json()
+    name = data.get('name')
+
+    if not name:
+        return jsonify({"error": "Missing required field (name)"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Check if driver exists first (Corrected error message)
+        cur.execute("SELECT 1 FROM DRIVER WHERE NAME = %s", (name,))
+        if not cur.fetchone():
+            return jsonify({"error": f"Driver with name '{name}' not found"}), 404
+
+        # Check Foreign Key constraints before deleting
+        # Check RENT table (Corrected SQL syntax)
+        cur.execute("SELECT 1 FROM RENT WHERE NAME = %s LIMIT 1", (name,))
+        if cur.fetchone():
+            return jsonify({"error": "Cannot remove driver: Referenced in RENT table."}), 409
+
+        # Check REVIEW table (Added back the check)
+        cur.execute("SELECT 1 FROM REVIEW WHERE NAME = %s LIMIT 1", (name,))
+        if cur.fetchone():
+            return jsonify({"error": "Cannot remove driver: Referenced in REVIEW table."}), 409
+
+        # Check DRIVES table
+        cur.execute("SELECT 1 FROM DRIVES WHERE NAME = %s LIMIT 1", (name,))
+        if cur.fetchone():
+            return jsonify({"error": "Cannot remove driver: Referenced in DRIVES table."}), 409
+
+        # If no constraints, delete the driver
+        cur.execute("DELETE FROM DRIVER WHERE NAME = %s", (name,))
+        conn.commit()
+
+        # Use clearer messages
+        if cur.rowcount > 0:
+            return jsonify({"message": f"Driver '{name}' removed successfully"}), 200
+        else:
+            return jsonify({"error": f"Driver '{name}' not found (post-check)"}), 404
+
+    except Exception as e:
+        conn.rollback()
+        # Use clearer messages
+        print(f"Error removing driver: {e}")
+        return jsonify({"error": f"Failed to remove driver: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+########################################################################
 
 if __name__=="__main__":
   app.run(debug=True, port=5000)

@@ -27,6 +27,13 @@ function Managers() {
   const [topKClients, setTopKClients] = useState([]);
   const [topKMessage, setTopKMessage] = useState(''); // Optional: Message for top-k results
 
+  // --- States for Driver Management ---
+  const [driverName, setDriverName] = useState('');
+  const [driverRoadName, setDriverRoadName] = useState('');
+  const [driverNumber, setDriverNumber] = useState('');
+  const [driverCity, setDriverCity] = useState('');
+  const [driverZipCode, setDriverZipCode] = useState('');
+  const [driverMessage, setDriverMessage] = useState(''); // Message for driver ops
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -64,36 +71,36 @@ function Managers() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoginMessage(''); // Clear previous messages
+    setLoginMessage('');
     console.log('Attempting to login with SSN:', loginSsn);
 
     try {
       const response = await fetch(`${API_URL}/managers/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ssn: loginSsn }),
       });
-
       const data = await response.json();
 
       if (response.ok) {
         setLoginMessage('Login successful!');
         setIsLoggedIn(true);
-        setManagerInfo(data.manager); // Store manager info from backend
-        setLoginSsn(''); // Clear login form
+        setManagerInfo(data.manager);
+        // --- Store the token --- (Use localStorage to persist across sessions)
+        localStorage.setItem('manager_access_token', data.access_token);
+        setLoginSsn('');
       } else {
-        // Handle login errors (e.g., invalid SSN)
         setLoginMessage(`Login failed: ${data.error || response.statusText}`);
         setIsLoggedIn(false);
         setManagerInfo(null);
+        localStorage.removeItem('manager_access_token'); // Ensure token is removed on failed login
       }
     } catch (error) {
       console.error('Login network error:', error);
       setLoginMessage('Login failed: Network error or server is down.');
       setIsLoggedIn(false);
       setManagerInfo(null);
+      localStorage.removeItem('manager_access_token');
     }
   };
 
@@ -102,47 +109,56 @@ function Managers() {
     setManagerInfo(null);
     setLoginMessage('');
     setRegMessage('');
-    setCarMessage(''); // Clear car messages on logout
-    setTopKMessage(''); // Clear top-k messages on logout
-    // Clear other form states if needed
-    setCarMake('');
-    setCarModel('');
-    setCarYear('');
-    setKValue('');
-    setTopKClients([]);
+    setCarMessage('');
+    setTopKMessage('');
+    setDriverMessage(''); // Clear driver message on logout
+    // Clear form states
+    setCarMake(''); setCarModel(''); setCarYear('');
+    setKValue(''); setTopKClients([]);
+    setDriverName(''); setDriverRoadName(''); setDriverNumber(''); setDriverCity(''); setDriverZipCode('');
+    localStorage.removeItem('manager_access_token');
   };
 
   const handleAddCarModel = async (e) => {
     e.preventDefault();
-    setCarMessage(''); // Clear previous car messages
+    setCarMessage('');
     console.log('Attempting to add car:', { make: carMake, model: carModel, year: carYear });
 
-    if (!isLoggedIn) {
-        setCarMessage("Error: You must be logged in to add cars.");
-        return;
+    // --- Get token from localStorage --- !!
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setCarMessage("Error: Authentication token not found. Please login again.");
+      setIsLoggedIn(false); // Force re-login if token is missing
+      setManagerInfo(null);
+      return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/managers/cars`, { // Endpoint for adding cars
+      const response = await fetch(`${API_URL}/managers/cars`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // TODO: Add Authorization header if backend requires authentication
-          // 'Authorization': `Bearer ${your_auth_token}`
+          // --- Add Authorization header --- !!
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ make: carMake, model: carModel, year: carYear }),
       });
 
       const data = await response.json();
 
-      if (response.ok) { // Status 201 Created
+      if (response.ok) {
         setCarMessage(`Car added successfully! (ID: ${data.carId})`);
-        // Clear the form
         setCarMake('');
         setCarModel('');
         setCarYear('');
       } else {
-        setCarMessage(`Failed to add car: ${data.error || response.statusText}`);
+        // Check for specific auth errors (e.g., 401 Unauthorized, 422 Unprocessable Entity for expired/invalid token)
+        if (response.status === 401 || response.status === 422) {
+           setCarMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+           handleLogout(); // Log out user if token is invalid/expired
+        } else {
+           setCarMessage(`Failed to add car: ${data.error || response.statusText}`);
+        }
       }
     } catch (error) {
       console.error('Add car network error:', error);
@@ -151,42 +167,46 @@ function Managers() {
   };
 
   const handleRemoveCarModel = async (e) => {
-    // Note: This function triggers on button click, not form submit by default
-    e.preventDefault(); // Good practice to prevent any default action
-    setCarMessage(''); // Clear previous car messages
+    e.preventDefault();
+    setCarMessage('');
     console.log('Attempting to remove car:', { make: carMake, model: carModel, year: carYear });
 
-    if (!isLoggedIn) {
-        setCarMessage("Error: You must be logged in to remove cars.");
-        return;
+    // --- Get token from localStorage --- !!
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setCarMessage("Error: Authentication token not found. Please login again.");
+      setIsLoggedIn(false);
+      setManagerInfo(null);
+      return;
     }
+
     if (!carMake || !carModel || !carYear) {
         setCarMessage("Error: Please fill in Make, Model, and Year to identify the car to remove.");
         return;
     }
 
-
     try {
-      const response = await fetch(`${API_URL}/managers/cars/remove`, { // Endpoint for removing cars
-        method: 'POST', // Using POST as it modifies data and takes parameters in body
+      const response = await fetch(`${API_URL}/managers/cars/remove`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-           // TODO: Add Authorization header if backend requires authentication
+          // --- Add Authorization header --- !!
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ make: carMake, model: carModel, year: carYear }),
       });
 
       const data = await response.json();
 
-      if (response.ok) { // Status 200 OK
-        setCarMessage(data.message || 'Car removed successfully!'); // Use message from backend
-         // Optionally clear the form after successful removal
-        // setCarMake('');
-        // setCarModel('');
-        // setCarYear('');
+      if (response.ok) {
+        setCarMessage(data.message || 'Car removed successfully!');
       } else {
-         // Handle specific errors like 404 Not Found or 409 Conflict
-         setCarMessage(`Failed to remove car: ${data.error || response.statusText}`);
+         if (response.status === 401 || response.status === 422) {
+           setCarMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+           handleLogout();
+        } else {
+           setCarMessage(`Failed to remove car: ${data.error || response.statusText}`);
+        }
       }
     } catch (error) {
       console.error('Remove car network error:', error);
@@ -198,48 +218,155 @@ function Managers() {
     e.preventDefault();
     setTopKMessage(''); // Clear previous message
     setTopKClients([]); // Clear previous results
-    console.log('getting top k clients', { k: kValue });
+    console.log('Requesting top k clients', { k: kValue });
 
-    if (!isLoggedIn) {
-        setTopKMessage("Error: You must be logged in to view reports.");
-        return;
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setTopKMessage("Error: Authentication token not found. Please login again.");
+      handleLogout(); // Logout if no token
+      return;
     }
     if (!kValue || kValue <= 0) {
-        setTopKMessage("Error: Please enter a valid positive number for K.");
+      setTopKMessage("Error: Please enter a valid positive number for K.");
+      return;
+    }
+
+    try {
+      // --- Actual API Call --- !!
+      const response = await fetch(`${API_URL}/managers/reports/top-clients?k=${kValue}`, {
+        method: 'GET', // Use GET method
+        headers: {
+          // --- Add Authorization header --- !!
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.clients && data.clients.length > 0) {
+           setTopKClients(data.clients);
+           setTopKMessage(''); // Clear any previous error message
+        } else {
+           setTopKClients([]);
+           setTopKMessage(`No client rental data found.`);
+        }
+      } else {
+        // Handle errors (including auth errors from backend)
+        if (response.status === 401 || response.status === 422) {
+            setTopKMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+            handleLogout();
+        } else {
+            setTopKMessage(`Failed to get top clients: ${data.error || response.statusText}`);
+        }
+         setTopKClients([]); // Clear results on error
+      }
+    } catch (error) {
+      console.error('Top K clients network error:', error);
+      setTopKMessage('Failed to get top clients: Network error or server is down.');
+      setTopKClients([]); // Clear results on network error
+    }
+  };
+
+  // --- Driver Management Handlers ---
+
+  const handleAddDriver = async (e) => {
+    e.preventDefault();
+    setDriverMessage('');
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setDriverMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    const driverData = {
+      name: driverName,
+      roadname: driverRoadName,
+      number: driverNumber,
+      city: driverCity,
+      zipcode: driverZipCode,
+    };
+
+    console.log('Attempting to add driver:', driverData);
+
+    try {
+      const response = await fetch(`${API_URL}/managers/drivers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(driverData),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setDriverMessage("Driver added successfully!");
+        // Clear form
+        setDriverName('');
+        setDriverRoadName('');
+        setDriverNumber('');
+        setDriverCity('');
+        setDriverZipCode('');
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setDriverMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setDriverMessage(`Failed to add driver: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('Add driver network error:', error);
+      setDriverMessage('Failed to add driver: Network error or server is down.');
+    }
+  };
+
+  const handleRemoveDriver = async (e) => {
+    e.preventDefault();
+    setDriverMessage('');
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setDriverMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    if (!driverName) {
+        setDriverMessage("Error: Please enter the Name of the driver to remove.");
         return;
     }
 
-    // TODO: Replace with actual API Call to backend to get top K clients
-    // Example:
-    // try {
-    //   const response = await fetch(`${API_URL}/managers/reports/top-clients?k=${kValue}`, {
-    //     method: 'GET', // Assuming GET request
-    //     headers: {
-    //       // TODO: Add Authorization header if needed
-    //     }
-    //   });
-    //   const data = await response.json();
-    //   if (response.ok) {
-    //     setTopKClients(data.clients);
-    //     if (data.clients.length === 0) {
-    //         setTopKMessage(`No client data found.`);
-    //     }
-    //   } else {
-    //     setTopKMessage(`Failed to get top clients: ${data.error || response.statusText}`);
-    //   }
-    // } catch (error) {
-    //   console.error('Top K clients network error:', error);
-    //   setTopKMessage('Failed to get top clients: Network error or server is down.');
-    // }
+    console.log('Attempting to remove driver:', driverName);
 
-    // --- Placeholder Data ---
-    setTopKMessage(''); // Clear error message if validation passed
-    setTopKClients([
-       { name: 'Hossein Fatho', email: 'Hossein.fatho@gmail.com' },
-       { name: 'Yamman Nandolia', email: 'Yamman.Nandolia@gmail.com' },
-       { name: 'Kaustubha Medikundam', email: 'Kaustubha.Medikundam@gmail.com' },
-    ]);
-    // --- End Placeholder ---
+    try {
+      const response = await fetch(`${API_URL}/managers/drivers/remove`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: driverName }), // Only need name to remove
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setDriverMessage(data.message || "Driver removed successfully!");
+        // Optionally clear the name field
+        // setDriverName('');
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setDriverMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setDriverMessage(`Failed to remove driver: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('Remove driver network error:', error);
+      setDriverMessage('Failed to remove driver: Network error or server is down.');
+    }
   };
 
   return (
@@ -330,17 +457,48 @@ function Managers() {
             </form>
             {topKClients.length > 0 && (
               <div className="results">
-                <h4>Top {kValue} Clients:</h4>
+                <h4>Top {kValue} Clients (by number of rents):</h4>
                 <ul>
                   {topKClients.map((client, index) => (
-                    <li key={index}>{client.name} ({client.email})</li>
+                    // Display name, email, and optionally the rent_count from backend
+                    <li key={index}>
+                       {client.name} ({client.email})
+                       {client.rent_count && ` - ${client.rent_count} rent(s)`} 
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
 
-          {/* TODO: Add UI for other manager actions (3, 5, 6, 7, 8, 9) */}
+          {/* --- Driver Management Section --- */}
+          <div className="action-section">
+            <h3>Manage Drivers</h3>
+            <form onSubmit={handleAddDriver} className="sub-action">
+              <h4>Add New Driver</h4>
+              <div className="controls stacked">
+                <input type="text" placeholder="Driver Name" value={driverName} onChange={(e) => setDriverName(e.target.value)} required />
+                <input type="text" placeholder="Road Name" value={driverRoadName} onChange={(e) => setDriverRoadName(e.target.value)} required />
+                <input type="text" placeholder="Number" value={driverNumber} onChange={(e) => setDriverNumber(e.target.value)} required />
+                <input type="text" placeholder="City" value={driverCity} onChange={(e) => setDriverCity(e.target.value)} required />
+                <input type="text" placeholder="Zip Code" value={driverZipCode} onChange={(e) => setDriverZipCode(e.target.value)} required />
+                 <button type="submit">Add Driver</button>
+              </div>
+            </form>
+            {/* Form/Button for Removing Driver */} 
+            <form onSubmit={handleRemoveDriver} className="sub-action" style={{marginTop: '15px', borderTop: '1px solid #eee', paddingTop: '15px'}}>
+                <h4>Remove Driver</h4>
+                 <div className="controls">
+                   {/* Use the same driverName state or a different one if preferred */} 
+                  <input type="text" placeholder="Driver Name to Remove" value={driverName} onChange={(e) => setDriverName(e.target.value)} required />
+                  <button type="submit">Remove Driver</button>
+                 </div>
+            </form>
+             {/* Display Driver Management Messages */} 
+            {driverMessage && <p className={`message ${driverMessage.includes('Failed') || driverMessage.includes('Error') ? 'error' : 'success'}`}>{driverMessage}</p>}
+          </div>
+
+          {/* TODO: Add UI for other manager actions (5, 6, 7, 8, 9) */}
 
         </div>
       )}
