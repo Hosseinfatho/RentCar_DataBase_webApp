@@ -8,6 +8,7 @@ function Managers() {
   const [regName, setRegName] = useState('');
   const [regSsn, setRegSsn] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPinCode, setRegPinCode] = useState(''); // State for the registration pincode
   const [regMessage, setRegMessage] = useState(''); // To show registration success/error
 
   //state for login
@@ -59,31 +60,30 @@ function Managers() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    setRegMessage(''); // Clear previous messages
-    console.log('Attempting to register Manager:', { name: regName, ssn: regSsn, email: regEmail });
+    setRegMessage('');
+    // Include pincode in log message
+    console.log('Attempting to register Manager:', { name: regName, ssn: regSsn, email: regEmail, pincode: '****' }); // Mask pincode in log
 
     try {
       const response = await fetch(`${API_URL}/managers/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: regName, ssn: regSsn, email: regEmail }),
+        headers: { 'Content-Type': 'application/json' },
+        // --- Include pincode in the request body --- !!
+        body: JSON.stringify({ name: regName, ssn: regSsn, email: regEmail, pincode: regPinCode }),
       });
 
       const data = await response.json();
 
-      if (response.ok) { // Status code 200-299
-        setRegMessage('Registration successful! You can now login.');
-        // Clear registration form
+      if (response.ok) { // Status 201 Created
+        // Modify success message based on response or context if needed
+        setRegMessage(data.message || 'Registration successful! You can now login.');
         setRegName('');
         setRegSsn('');
         setRegEmail('');
-        // Optionally log the user in directly or prompt them to login
-        // setIsLoggedIn(true); // Or keep false and let them log in separately
+        setRegPinCode(''); // Clear pincode field
       } else {
-        // Handle errors (e.g., duplicate SSN/email, validation errors)
-        setRegMessage(`Registration failed: ${data.error || response.statusText}`);
+         // Handle specific errors like 403 Forbidden (registration closed / invalid pincode)
+         setRegMessage(`Registration failed: ${data.error || response.statusText}`);
       }
     } catch (error) {
       console.error('Registration network error:', error);
@@ -151,6 +151,7 @@ function Managers() {
     setCityCriteriaClients([]); // Clear city criteria data
     setProblematicDrivers([]); // Clear problematic driver data
     setBrandStatsReport([]); // Clear brand stats data
+    setRegPinCode(''); // Clear pincode on logout
     localStorage.removeItem('manager_access_token');
   };
 
@@ -653,13 +654,22 @@ function Managers() {
           {/* Registration Form */}
           <form onSubmit={handleRegister} className="sub-action">
             <h4>Register New Manager</h4>
+            <p style={{fontSize: '0.8em', color: 'gray'}}>Note: Registration requires a special pincode only for the very first manager.</p> {/* Add explanation */} 
             <div className="controls stacked">
               <input type="text" placeholder="Name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
               <input type="text" placeholder="SSN" value={regSsn} onChange={(e) => setRegSsn(e.target.value)} required />
               <input type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
+              {/* --- Add Pincode Input --- */} 
+              <input 
+                 type="password"  /* Use password type to mask input */ 
+                 placeholder="Pincode (for first registration only)" 
+                 value={regPinCode} 
+                 onChange={(e) => setRegPinCode(e.target.value)} 
+                 required 
+               />
               <button type="submit">Register</button>
             </div>
-            {regMessage && <p className={`message ${regMessage.includes('failed') ? 'error' : 'success'}`}>{regMessage}</p>}
+            {regMessage && <p className={`message ${regMessage.includes('failed') || regMessage.includes('closed') || regMessage.includes('Invalid') ? 'error' : 'success'}`}>{regMessage}</p>}
           </form>
         </div>
       ) : (
