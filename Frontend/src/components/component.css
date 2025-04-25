@@ -45,4 +45,117 @@
   .component-content h2 {
     border-bottom-color: #eee;
   }
+}
+
+/* Style for input/button controls */
+.controls {
+  display: flex; /* Arrange input and button inline */
+  align-items: center; /* Align items vertically */
+  justify-content: flex-start; /* Align items to the left */
+  margin-top: 15px; /* Add some space above controls */
+  gap: 10px; /* Add space between number, input and button */
+}
+
+.controls input[type="text"] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  flex-grow: 1; /* Allow input to take available space */
+  min-width: 100px; /* Ensure input doesn't get too small */
+}
+
+.controls select {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: inherit; /* Match background */
+  color: inherit; /* Match text color */
+  flex-grow: 1; /* Allow select to take available space */
+}
+
+.controls button {
+  /* Inherits button styles from index.css, add overrides if needed */
+  padding: 8px 15px; /* Adjust padding */
+}
+
+/* Style for the number label */
+.control-number {
+  font-weight: bold;
+  margin-right: 5px; /* Space after number */
+}
+
+/* Styles for new action sections */
+.action-section {
+  margin-top: 25px;
+  padding-top: 15px;
+  border-top: 1px dashed #ccc; 
+}
+
+.action-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+}
+
+.sub-action {
+  margin-bottom: 20px;
+}
+
+.sub-action h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1em;
+  font-weight: normal;
+  color: #555;
+}
+
+/* Style for stacked controls */
+.controls.stacked {
+  flex-direction: column;
+  align-items: stretch; /* Make inputs full width */
+}
+
+.controls.stacked input,
+.controls.stacked button,
+.controls.stacked div /* Button group */ {
+  width: 100%; /* Make elements take full width */
+  margin-bottom: 10px; /* Space between stacked elements */
+}
+
+.controls.stacked button:last-child,
+.controls.stacked div:last-child /* Button group */ {
+  margin-bottom: 0;
+}
+
+/* Styles for results area */
+.results {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #e9e9e9;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.results h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.results ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+/* Theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .action-section { border-top-color: #555; }
+  .sub-action h4 { color: #aaa; }
+  .results { background-color: #3a3a3a; }
+  .component-content h2 { border-bottom-color: #444; }
+}
+@media (prefers-color-scheme: light) {
+  .action-section { border-top-color: #ddd; }
+  .sub-action h4 { color: #555; }
+  .results { background-color: #f0f0f0; }
+  .component-content h2 { border-bottom-color: #eee; }
 } 
