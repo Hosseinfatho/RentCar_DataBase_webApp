@@ -39,6 +39,10 @@ function Managers() {
   const [modelRentReport, setModelRentReport] = useState([]);
   const [modelRentMessage, setModelRentMessage] = useState('');
 
+  // --- State for Driver Stats Report ---
+  const [driverStatsReport, setDriverStatsReport] = useState([]);
+  const [driverStatsMessage, setDriverStatsMessage] = useState('');
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setRegMessage(''); // Clear previous messages
@@ -117,6 +121,7 @@ function Managers() {
     setTopKMessage('');
     setDriverMessage(''); // Clear driver message on logout
     setModelRentMessage(''); // Clear model report message
+    setDriverStatsMessage(''); // Clear driver stats message
     // Clear form states
     setCarMake(''); setCarModel(''); setCarYear('');
     setKValue('');
@@ -124,6 +129,7 @@ function Managers() {
     // Clear report data
     setTopKClients([]);
     setModelRentReport([]); // Clear model report data
+    setDriverStatsReport([]); // Clear driver stats data
     localStorage.removeItem('manager_access_token');
   };
 
@@ -419,6 +425,48 @@ function Managers() {
     }
   };
 
+  // --- Driver Stats Report Handler ---
+  const handleGenerateDriverReport = async () => {
+    setDriverStatsMessage(''); // Clear previous message
+    setDriverStatsReport([]); // Clear previous report
+    console.log('Requesting driver stats report');
+
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setDriverStatsMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/managers/reports/driver-stats`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.driver_stats_report && data.driver_stats_report.length > 0) {
+          setDriverStatsReport(data.driver_stats_report);
+        } else {
+          setDriverStatsMessage("No driver data found.");
+        }
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setDriverStatsMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setDriverStatsMessage(`Failed to generate report: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('Driver stats report network error:', error);
+      setDriverStatsMessage('Failed to generate report: Network error or server is down.');
+    }
+  };
+
   return (
     <div className="component-content">
       <div className="image-container">
@@ -593,7 +641,42 @@ function Managers() {
             )}
           </div>
 
-          {/* TODO: Add UI for other manager actions (6, 7, 8, 9) */}
+          {/* --- Driver Stats Report Section --- */}
+          <div className="action-section">
+            <h3>Driver Performance Report</h3>
+            <div className="sub-action">
+               <button type="button" onClick={handleGenerateDriverReport}>Generate Driver Report</button>
+            </div>
+            {/* Display Message */} 
+            {driverStatsMessage && <p className={`message ${driverStatsMessage.includes('Failed') || driverStatsMessage.includes('Error') ? 'error' : 'success'}`}>{driverStatsMessage}</p>}
+            {/* Display Report Data */} 
+            {driverStatsReport.length > 0 && (
+              <div className="results" style={{marginTop: '10px'}}>
+                <h4>Driver Stats:</h4>
+                 <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                    <thead>
+                       <tr style={{borderBottom: '1px solid #ccc'}}>
+                          <th style={{textAlign: 'left', padding: '5px'}}>Driver Name</th>
+                          <th style={{textAlign: 'right', padding: '5px'}}>Total Rents</th>
+                          <th style={{textAlign: 'right', padding: '5px'}}>Average Rating</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                    {driverStatsReport.map((driver, index) => (
+                      <tr key={index} style={{borderBottom: '1px solid #eee'}}>
+                         <td style={{padding: '5px'}}>{driver.name}</td>
+                         <td style={{textAlign: 'right', padding: '5px'}}>{driver.total_rents}</td>
+                         {/* Format average rating to 1 decimal place */} 
+                         <td style={{textAlign: 'right', padding: '5px'}}>{parseFloat(driver.average_rating).toFixed(1)}</td>
+                      </tr>
+                    ))}
+                    </tbody>
+                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* TODO: Add UI for other manager actions (7, 8, 9) */}
 
         </div>
       )}

@@ -432,6 +432,46 @@ def remove_driver():
         cur.close()
         conn.close()
 
+@app.route('/api/managers/reports/driver-stats', methods=['GET'])
+@jwt_required()
+def get_driver_stats_report():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to get driver name, total rents, and average rating
+        # Using LEFT JOINs to include drivers with no rents or no reviews
+        query = """
+            SELECT 
+                d.NAME AS name,
+                COALESCE(COUNT(DISTINCT r.RENTID), 0) AS total_rents, 
+                COALESCE(AVG(v.RATING), 0.0) AS average_rating
+            FROM DRIVER d
+            LEFT JOIN RENT r ON d.NAME = r.NAME
+            LEFT JOIN REVIEW v ON d.NAME = v.NAME
+            GROUP BY d.NAME
+            ORDER BY d.NAME;
+        """
+        # COALESCE is used to return 0 instead of NULL if a driver has no rents or reviews
+        # AVG returns a numeric type, COALESCE ensures it's float 0.0 for consistency
+        
+        cur.execute(query)
+        driver_stats = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        report_list = [dict(driver) for driver in driver_stats]
+
+        return jsonify({"driver_stats_report": report_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching driver stats report: {e}")
+        return jsonify({"error": f"Failed to fetch driver stats report: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 ########################################################################
 
 if __name__=="__main__":
