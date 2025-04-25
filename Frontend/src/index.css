@@ -1,0 +1,163 @@
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+html, body, #root {
+  height: 100%; /* Make html, body, and react root take full viewport height */
+  margin: 0; /* Remove default body margin */
+  padding: 0; /* Remove default padding */
+}
+
+/* Explicitly target #root to ensure no margin/padding */
+#root {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body {
+  /* display: flex; /* Remove flex from body if not needed */
+  /* place-items: normal; /* Override from before */
+  /* min-width: 320px; /* Keep or remove based on design */
+  /* min-height: 100vh; /* Replaced by height: 100% */
+}
+
+h1 {
+  font-size: 1.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+/* Make the main App component a flex container that takes full height */
+.App {
+  display: flex;
+  flex-direction: column; /* Stack title and container vertically */
+  height: 100%; /* Make App fill its container (#root) */
+  width: 100%;
+  border: 2px dotted red; /* Add temporary border for debugging */
+  box-sizing: border-box; /* Ensure border doesn't add to size */
+}
+
+/* Style the main H1 in App */
+.App > h1 {
+    text-align: center;
+    padding: 10px 0; /* Add minimal vertical padding if needed, no horizontal */
+    flex-shrink: 0; 
+    color: #646cff; 
+    background-color: #333; /* Example: Add background to see its bounds */
+    margin: 0; /* Explicitly remove all margins */
+}
+
+/* Styles for horizontal sections - Full Width & Height */
+.container {
+  display: flex;
+  flex-direction: row; 
+  padding: 0; 
+  width: 100%; 
+  /* min-height: 80vh; /* Remove fixed min-height */
+  flex-grow: 1; /* Allow container to grow and fill remaining vertical space */
+  box-sizing: border-box; 
+}
+
+.section {
+  border: 1px solid #ccc;
+  padding: 20px; 
+  flex: 1; 
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+  background-color: #ffffff; 
+  box-sizing: border-box; 
+  overflow-y: auto; /* Add scroll if content overflows vertically */
+}
+
+/* Remove border from the last section if added */
+/* .section:last-child {
+  border-right: none;
+} */
+
+.section h2 {
+  margin-top: 0;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+}
+
+/* Light theme adjustments for sections */
+@media (prefers-color-scheme: light) {
+  .section {
+    background-color: #f9f9f9;
+    border-color: #ddd;
+  }
+  .section h2 {
+    color: #333;
+    border-bottom-color: #eee;
+  }
+  .App > h1 {
+      color: #213547;
+      background-color: #eee; /* Adjust background for light mode */
+  }
+}
+
+/* Dark theme adjustments for sections */
+@media (prefers-color-scheme: dark) {
+  .section {
+    background-color: #2e2e2e;
+    border-color: #555;
+  }
+    .section h2 {
+    color: #eee;
+    border-bottom-color: #444;
+  }
+  .App > h1 {
+      color: #909bff; 
+      background-color: #1a1a1a; /* Adjust background for dark mode */
+  }
+}
