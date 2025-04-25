@@ -43,6 +43,12 @@ function Managers() {
   const [driverStatsReport, setDriverStatsReport] = useState([]);
   const [driverStatsMessage, setDriverStatsMessage] = useState('');
 
+  // --- State for City Criteria Report ---
+  const [clientCity1, setClientCity1] = useState('');
+  const [driverCity2, setDriverCity2] = useState('');
+  const [cityCriteriaClients, setCityCriteriaClients] = useState([]);
+  const [cityCriteriaMessage, setCityCriteriaMessage] = useState('');
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setRegMessage(''); // Clear previous messages
@@ -122,14 +128,17 @@ function Managers() {
     setDriverMessage(''); // Clear driver message on logout
     setModelRentMessage(''); // Clear model report message
     setDriverStatsMessage(''); // Clear driver stats message
+    setCityCriteriaMessage(''); // Clear city criteria message
     // Clear form states
     setCarMake(''); setCarModel(''); setCarYear('');
     setKValue('');
     setDriverName(''); setDriverRoadName(''); setDriverNumber(''); setDriverCity(''); setDriverZipCode('');
+    setClientCity1(''); setDriverCity2(''); // Clear city inputs
     // Clear report data
     setTopKClients([]);
     setModelRentReport([]); // Clear model report data
     setDriverStatsReport([]); // Clear driver stats data
+    setCityCriteriaClients([]); // Clear city criteria data
     localStorage.removeItem('manager_access_token');
   };
 
@@ -467,6 +476,57 @@ function Managers() {
     }
   };
 
+  // --- City Criteria Report Handler ---
+  const handleGenerateCityCriteriaReport = async (e) => {
+    e.preventDefault(); // Prevent default form submission
+    setCityCriteriaMessage('');
+    setCityCriteriaClients([]);
+    console.log('Requesting clients by city criteria', { city1: clientCity1, city2: driverCity2 });
+
+    if (!clientCity1 || !driverCity2) {
+      setCityCriteriaMessage("Error: Please enter both Client City (C1) and Driver City (C2).");
+      return;
+    }
+
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setCityCriteriaMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    try {
+      const encodedCity1 = encodeURIComponent(clientCity1);
+      const encodedCity2 = encodeURIComponent(driverCity2);
+
+      const response = await fetch(`${API_URL}/managers/reports/clients-by-city-criteria?city1=${encodedCity1}&city2=${encodedCity2}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.clients && data.clients.length > 0) {
+          setCityCriteriaClients(data.clients);
+        } else {
+          setCityCriteriaMessage(`No clients found matching the criteria (Client in ${clientCity1}, Driver in ${driverCity2}).`);
+        }
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setCityCriteriaMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setCityCriteriaMessage(`Failed to generate report: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('City criteria report network error:', error);
+      setCityCriteriaMessage('Failed to generate report: Network error or server is down.');
+    }
+  };
+
   return (
     <div className="component-content">
       <div className="image-container">
@@ -676,7 +736,35 @@ function Managers() {
             )}
           </div>
 
-          {/* TODO: Add UI for other manager actions (7, 8, 9) */}
+          {/* --- Client Report by City Criteria Section --- */}
+          <div className="action-section">
+            <h3>Client Report by City Criteria</h3>
+             <form onSubmit={handleGenerateCityCriteriaReport} className="sub-action">
+              <h4>Find Clients Living in C1 with Driver from C2</h4>
+              <div className="controls stacked">
+                <input type="text" placeholder="Client City (C1)" value={clientCity1} onChange={(e) => setClientCity1(e.target.value)} required />
+                <input type="text" placeholder="Driver City (C2)" value={driverCity2} onChange={(e) => setDriverCity2(e.target.value)} required />
+                 <button type="submit">Generate Report</button>
+              </div>
+            </form>
+            {/* Display Message */} 
+            {cityCriteriaMessage && <p className={`message ${cityCriteriaMessage.includes('Failed') || cityCriteriaMessage.includes('Error') ? 'error' : 'success'}`}>{cityCriteriaMessage}</p>}
+            {/* Display Report Data */} 
+            {cityCriteriaClients.length > 0 && (
+              <div className="results" style={{marginTop: '10px'}}>
+                <h4>Matching Clients:</h4>
+                 <ul>
+                    {cityCriteriaClients.map((client, index) => (
+                      <li key={index}>
+                         {client.name} ({client.email})
+                      </li>
+                    ))}
+                 </ul>
+              </div>
+            )}
+          </div>
+
+          {/* TODO: Add UI for other manager actions (8, 9) */}
 
         </div>
       )}

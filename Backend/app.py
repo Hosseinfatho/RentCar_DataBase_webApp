@@ -319,6 +319,54 @@ def get_model_rent_counts():
         cur.close()
         conn.close()
 
+@app.route('/api/managers/reports/clients-by-city-criteria', methods=['GET'])
+@jwt_required()
+def get_clients_by_city_criteria():
+    city1 = request.args.get('city1')
+    city2 = request.args.get('city2')
+
+    if not city1 or not city2:
+        return jsonify({"error": "Missing required query parameters: 'city1' and 'city2'"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to find clients living in city1 who rented with a driver from city2
+        query = """
+            SELECT DISTINCT c.NAME AS name, c.EMAIL AS email
+            FROM CLIENT c
+            WHERE
+                EXISTS (
+                    SELECT 1
+                    FROM LIVES l
+                    WHERE l.EMAIL = c.EMAIL AND l.CITY = %s 
+                )
+                AND EXISTS (
+                    SELECT 1
+                    FROM RENT r
+                    JOIN DRIVER d ON r.NAME = d.NAME
+                    WHERE r.EMAIL = c.EMAIL AND d.CITY = %s 
+                )
+            ORDER BY c.NAME;
+        """
+        cur.execute(query, (city1, city2))
+        clients = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        clients_list = [dict(client) for client in clients]
+
+        return jsonify({"clients": clients_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching clients by city criteria: {e}")
+        return jsonify({"error": f"Failed to fetch clients by city criteria: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/api/managers/drivers', methods=['POST'])
 @jwt_required()
 def add_driver():
