@@ -367,6 +367,62 @@ def get_clients_by_city_criteria():
         cur.close()
         conn.close()
 
+@app.route('/api/managers/reports/problematic-drivers', methods=['GET'])
+@jwt_required()
+def get_problematic_drivers():
+    target_city = 'Chicago' # Define the target city
+    rating_threshold = 2.5  # Define the rating threshold
+    min_rents = 2           # Define minimum distinct rents
+    min_clients = 2         # Define minimum distinct clients
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to find problematic drivers based on the specified criteria
+        query = """
+            SELECT d.NAME AS name
+            FROM DRIVER d
+            LEFT JOIN ( -- Subquery to calculate average rating
+                SELECT NAME, AVG(RATING) as avg_rating
+                FROM REVIEW
+                GROUP BY NAME
+            ) AS avg_ratings ON d.NAME = avg_ratings.NAME
+            WHERE
+                d.CITY = %s -- Driver's address is in the target city
+                AND avg_ratings.avg_rating < %s -- Average rating is below threshold
+                AND EXISTS ( -- Subquery to check rent/client criteria
+                    SELECT 1
+                    FROM RENT r
+                    JOIN CLIENT c ON r.EMAIL = c.EMAIL
+                    JOIN LIVES l ON c.EMAIL = l.EMAIL
+                    WHERE
+                        r.NAME = d.NAME -- Rent associated with the current driver
+                        AND l.CITY = %s -- Client associated with the rent lives in the target city
+                    GROUP BY r.NAME -- Group by driver to apply HAVING clause correctly
+                    HAVING
+                        COUNT(DISTINCT r.RENTID) >= %s -- At least min_rents distinct rents for target city clients
+                        AND COUNT(DISTINCT c.EMAIL) >= %s -- At least min_clients distinct target city clients involved
+                )
+            ORDER BY d.NAME;
+        """
+        cur.execute(query, (target_city, rating_threshold, target_city, min_rents, min_clients))
+        drivers = cur.fetchall()
+
+        # Extract just the names
+        driver_names = [driver['name'] for driver in drivers]
+
+        return jsonify({"problematic_drivers": driver_names}), 200
+
+    except Exception as e:
+        print(f"Error fetching problematic drivers: {e}")
+        return jsonify({"error": f"Failed to fetch problematic drivers: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/api/managers/drivers', methods=['POST'])
 @jwt_required()
 def add_driver():

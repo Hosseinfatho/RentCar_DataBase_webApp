@@ -49,6 +49,10 @@ function Managers() {
   const [cityCriteriaClients, setCityCriteriaClients] = useState([]);
   const [cityCriteriaMessage, setCityCriteriaMessage] = useState('');
 
+  // --- State for Problematic Drivers Report ---
+  const [problematicDrivers, setProblematicDrivers] = useState([]);
+  const [problematicDriversMessage, setProblematicDriversMessage] = useState('');
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setRegMessage(''); // Clear previous messages
@@ -129,6 +133,7 @@ function Managers() {
     setModelRentMessage(''); // Clear model report message
     setDriverStatsMessage(''); // Clear driver stats message
     setCityCriteriaMessage(''); // Clear city criteria message
+    setProblematicDriversMessage(''); // Clear problematic driver message
     // Clear form states
     setCarMake(''); setCarModel(''); setCarYear('');
     setKValue('');
@@ -139,6 +144,7 @@ function Managers() {
     setModelRentReport([]); // Clear model report data
     setDriverStatsReport([]); // Clear driver stats data
     setCityCriteriaClients([]); // Clear city criteria data
+    setProblematicDrivers([]); // Clear problematic driver data
     localStorage.removeItem('manager_access_token');
   };
 
@@ -527,6 +533,48 @@ function Managers() {
     }
   };
 
+  // --- Problematic Drivers Report Handler ---
+  const handleGenerateProblematicDriversReport = async () => {
+    setProblematicDriversMessage('');
+    setProblematicDrivers([]);
+    console.log('Requesting problematic drivers report');
+
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setProblematicDriversMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/managers/reports/problematic-drivers`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.problematic_drivers && data.problematic_drivers.length > 0) {
+          setProblematicDrivers(data.problematic_drivers);
+        } else {
+          setProblematicDriversMessage("No problematic local drivers found based on the criteria.");
+        }
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setProblematicDriversMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setProblematicDriversMessage(`Failed to generate report: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('Problematic drivers report network error:', error);
+      setProblematicDriversMessage('Failed to generate report: Network error or server is down.');
+    }
+  };
+
   return (
     <div className="component-content">
       <div className="image-container">
@@ -764,7 +812,31 @@ function Managers() {
             )}
           </div>
 
-          {/* TODO: Add UI for other manager actions (8, 9) */}
+          {/* --- Problematic Local Drivers Report Section --- */}
+          <div className="action-section">
+            <h3>Problematic Local Drivers Report</h3>
+             <div className="sub-action">
+               <p>Finds drivers in 'Chicago' with avg. rating &lt; 2.5 who drove &ge; 2 rents for &ge; 2 distinct clients from 'Chicago'.</p>
+               <button type="button" onClick={handleGenerateProblematicDriversReport}>Generate Report</button>
+            </div>
+            {/* Display Message */} 
+            {problematicDriversMessage && <p className={`message ${problematicDriversMessage.includes('Failed') || problematicDriversMessage.includes('Error') ? 'error' : 'success'}`}>{problematicDriversMessage}</p>}
+            {/* Display Report Data */} 
+            {problematicDrivers.length > 0 && (
+              <div className="results" style={{marginTop: '10px'}}>
+                <h4>Problematic Drivers:</h4>
+                 <ul>
+                    {problematicDrivers.map((driverName, index) => (
+                      <li key={index}>
+                         {driverName}
+                      </li>
+                    ))}
+                 </ul>
+              </div>
+            )}
+          </div>
+
+          {/* TODO: Add UI for other manager actions (9) */}
 
         </div>
       )}
