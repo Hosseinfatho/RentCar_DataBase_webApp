@@ -423,6 +423,73 @@ def get_problematic_drivers():
         cur.close()
         conn.close()
 
+@app.route('/api/managers/reports/brand-stats', methods=['GET'])
+@jwt_required()
+def get_brand_stats_report():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query using CTEs to calculate brand stats
+        query = """
+            WITH BrandDriverNames AS (
+                -- Find distinct pairs of (brand, driver_name) for drivers who can drive that brand
+                SELECT DISTINCT
+                    c.MAKE AS brand,
+                    d.NAME AS driver_name
+                FROM CAR c
+                JOIN MODEL m ON c.CARID = m.CARID
+                JOIN DRIVES dr ON m.MODELID = dr.MODELID AND m.CARID = dr.CARID
+                JOIN DRIVER d ON dr.NAME = d.NAME
+            ),
+            BrandAvgDriverRating AS (
+                -- Calculate the average rating for each brand based on drivers associated with it
+                SELECT
+                    bdn.brand,
+                    AVG(r.RATING) AS avg_rating
+                FROM BrandDriverNames bdn
+                JOIN REVIEW r ON bdn.driver_name = r.NAME
+                GROUP BY bdn.brand
+            ),
+            BrandRentCount AS (
+                -- Count the number of rents for each brand
+                SELECT
+                    c.MAKE AS brand,
+                    COUNT(r.RENTID) AS rent_count
+                FROM CAR c
+                JOIN MODEL m ON c.CARID = m.CARID
+                JOIN RENT r ON m.MODELID = r.MODELID AND m.CARID = r.CARID
+                GROUP BY c.MAKE
+            )
+            -- Final query to combine results for all distinct brands
+            SELECT
+                all_brands.brand,
+                COALESCE(badr.avg_rating, 0.0) AS average_driver_rating,
+                COALESCE(brc.rent_count, 0) AS total_rents
+            FROM (
+                SELECT DISTINCT MAKE AS brand FROM CAR
+            ) AS all_brands
+            LEFT JOIN BrandAvgDriverRating badr ON all_brands.brand = badr.brand
+            LEFT JOIN BrandRentCount brc ON all_brands.brand = brc.brand
+            ORDER BY all_brands.brand;
+        """
+        cur.execute(query)
+        brand_stats = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        report_list = [dict(brand) for brand in brand_stats]
+
+        return jsonify({"brand_stats_report": report_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching brand stats report: {e}")
+        return jsonify({"error": f"Failed to fetch brand stats report: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/api/managers/drivers', methods=['POST'])
 @jwt_required()
 def add_driver():

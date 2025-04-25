@@ -53,6 +53,10 @@ function Managers() {
   const [problematicDrivers, setProblematicDrivers] = useState([]);
   const [problematicDriversMessage, setProblematicDriversMessage] = useState('');
 
+  // --- State for Brand Stats Report ---
+  const [brandStatsReport, setBrandStatsReport] = useState([]);
+  const [brandStatsMessage, setBrandStatsMessage] = useState('');
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setRegMessage(''); // Clear previous messages
@@ -134,6 +138,7 @@ function Managers() {
     setDriverStatsMessage(''); // Clear driver stats message
     setCityCriteriaMessage(''); // Clear city criteria message
     setProblematicDriversMessage(''); // Clear problematic driver message
+    setBrandStatsMessage(''); // Clear brand stats message
     // Clear form states
     setCarMake(''); setCarModel(''); setCarYear('');
     setKValue('');
@@ -145,6 +150,7 @@ function Managers() {
     setDriverStatsReport([]); // Clear driver stats data
     setCityCriteriaClients([]); // Clear city criteria data
     setProblematicDrivers([]); // Clear problematic driver data
+    setBrandStatsReport([]); // Clear brand stats data
     localStorage.removeItem('manager_access_token');
   };
 
@@ -575,6 +581,48 @@ function Managers() {
     }
   };
 
+  // --- Brand Stats Report Handler ---
+  const handleGenerateBrandReport = async () => {
+    setBrandStatsMessage('');
+    setBrandStatsReport([]);
+    console.log('Requesting brand stats report');
+
+    const token = localStorage.getItem('manager_access_token');
+    if (!token) {
+      setBrandStatsMessage("Error: Authentication token not found. Please login again.");
+      handleLogout();
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/managers/reports/brand-stats`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.brand_stats_report && data.brand_stats_report.length > 0) {
+          setBrandStatsReport(data.brand_stats_report);
+        } else {
+          setBrandStatsMessage("No car brand data found.");
+        }
+      } else {
+        if (response.status === 401 || response.status === 422) {
+          setBrandStatsMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
+          handleLogout();
+        } else {
+          setBrandStatsMessage(`Failed to generate report: ${data.error || response.statusText}`);
+        }
+      }
+    } catch (error) {
+      console.error('Brand stats report network error:', error);
+      setBrandStatsMessage('Failed to generate report: Network error or server is down.');
+    }
+  };
+
   return (
     <div className="component-content">
       <div className="image-container">
@@ -836,7 +884,42 @@ function Managers() {
             )}
           </div>
 
-          {/* TODO: Add UI for other manager actions (9) */}
+          {/* --- Car Brand Performance Report Section --- */}
+          <div className="action-section">
+            <h3>Car Brand Performance Report</h3>
+            <div className="sub-action">
+               <p>Shows stats for each car brand: Average driver rating & Total rents.</p>
+               <button type="button" onClick={handleGenerateBrandReport}>Generate Brand Report</button>
+            </div>
+            {/* Display Message */} 
+            {brandStatsMessage && <p className={`message ${brandStatsMessage.includes('Failed') || brandStatsMessage.includes('Error') ? 'error' : 'success'}`}>{brandStatsMessage}</p>}
+            {/* Display Report Data */} 
+            {brandStatsReport.length > 0 && (
+              <div className="results" style={{marginTop: '10px'}}>
+                <h4>Brand Stats:</h4>
+                 <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                    <thead>
+                       <tr style={{borderBottom: '1px solid #ccc'}}>
+                          <th style={{textAlign: 'left', padding: '5px'}}>Brand (Make)</th>
+                          <th style={{textAlign: 'right', padding: '5px'}}>Avg. Driver Rating</th>
+                          <th style={{textAlign: 'right', padding: '5px'}}>Total Rents</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                    {brandStatsReport.map((brand, index) => (
+                      <tr key={index} style={{borderBottom: '1px solid #eee'}}>
+                         <td style={{padding: '5px'}}>{brand.brand}</td>
+                         <td style={{textAlign: 'right', padding: '5px'}}>{parseFloat(brand.average_driver_rating).toFixed(1)}</td>
+                         <td style={{textAlign: 'right', padding: '5px'}}>{brand.total_rents}</td>
+                      </tr>
+                    ))}
+                    </tbody>
+                 </table>
+              </div>
+            )}
+          </div>
+
+          {/*  other manager actions */}
 
         </div>
       )}
