@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 import uuid
 # --- JWT Imports ---
-from flask_jwt_extended import create_access_token, jwt_required, JWTManager
+from flask_jwt_extended import create_access_token, jwt_required, JWTManager, get_jwt_identity
 
 load_dotenv()
 app=Flask(__name__)
@@ -147,26 +147,44 @@ def add_car():
 
     cur = conn.cursor()
     try:
-
+        # --- Generate unique CARID --- 
         while True:
             car_id = uuid.uuid4().hex[:10].upper() # CARID is VARCHAR(10)
             cur.execute("SELECT CARID FROM CAR WHERE CARID = %s", (car_id,))
             if not cur.fetchone():
                 break # Found a unique ID
 
-        cur.execute(
-            "INSERT INTO CAR (CARID, MAKE, MODEL, YEAR) VALUES (%s, %s, %s, %s)",
-            (car_id, make, model, year)
-        )
-        # Note: This doesn't handle the MODEL table yet based on schema complexity
+        # --- Insert into CAR table --- 
+        insert_car_query = "INSERT INTO CAR (CARID, MAKE, MODEL, YEAR) VALUES (%s, %s, %s, %s)"
+        cur.execute(insert_car_query, (car_id, make, model, year))
+
+        # --- Generate unique MODELID and insert into MODEL table --- 
+        # Assuming MODEL table links CARID to a MODELID
+        # If MODEL table has other required columns, this needs adjustment.
+        while True:
+            model_id = uuid.uuid4().hex[:12].upper() # Generate a potential MODELID (adjust length if needed)
+            # Check if MODELID already exists (assuming MODELID is unique/primary key)
+            cur.execute("SELECT MODELID FROM MODEL WHERE MODELID = %s", (model_id,))
+            if not cur.fetchone():
+                break # Found unique MODELID
+        
+        # Insert into MODEL table (assuming columns MODELID, CARID)
+        insert_model_query = "INSERT INTO MODEL (MODELID, CARID) VALUES (%s, %s)" 
+        cur.execute(insert_model_query, (model_id, car_id))
+        
+        # --- Commit transaction --- 
         conn.commit()
-        return jsonify({"message": "Car added successfully", "carId": car_id}), 201
+        # Return success message including the generated CARID
+        return jsonify({"message": "Car and associated model added successfully", "carId": car_id, "modelId": model_id}), 201
 
     except Exception as e:
         conn.rollback()
-        print(f"Error adding car: {e}")
-        # Check for specific errors, e.g., foreign key constraints if they exist
-        return jsonify({"error": f"Failed to add car: {e}"}), 500
+        print(f"Error adding car/model: {e}")
+        # Check for specific errors
+        if isinstance(e, psycopg2.errors.ForeignKeyViolation):
+             return jsonify({"error": f"Failed to add model due to foreign key constraint: {e}"}), 400
+        # Add other specific error checks if needed
+        return jsonify({"error": f"Failed to add car/model: {e}"}), 500
     finally:
         cur.close()
         conn.close()
@@ -236,6 +254,37 @@ def remove_car():
         # Check if the error is a foreign key violation (useful for debugging)
         # e.g. if isinstance(e, psycopg2.errors.ForeignKeyViolation): ...
         return jsonify({"error": f"Failed to remove car: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+# --- Endpoint to get all car models (accessible by authenticated users) ---
+@app.route('/api/cars/models', methods=['GET'])
+@jwt_required() # Protect route
+def get_all_car_models():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to get all car details, order them for consistency
+        query = """
+            SELECT CARID as id, MAKE as make, MODEL as model, YEAR as year 
+            FROM CAR 
+            ORDER BY MAKE, MODEL, YEAR;
+        """
+        cur.execute(query)
+        cars = cur.fetchall()
+        
+        # Convert Row objects to simple dictionaries
+        cars_list = [dict(car) for car in cars]
+        
+        return jsonify({"cars": cars_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching all car models: {e}")
+        return jsonify({"error": f"Failed to fetch car models: {e}"}), 500
     finally:
         cur.close()
         conn.close()
@@ -659,6 +708,157 @@ def get_driver_stats_report():
 # client api
 
 #drvier api
+
+@app.route('/api/drivers/login', methods=['POST'])
+def login_driver():
+    data=request.get_json()
+    name=data.get('name') # Use 'name' for driver login
+    if not name:
+       return jsonify({"error": "Missing required field name"}), 400
+
+    conn=get_db_connection()
+    if not conn:
+       return jsonify({"error": "Database connection failed"}), 500
+
+    cur=conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    try:
+       # Fetch driver name and their full address details
+       # Join DRIVER and ADDRESS tables
+       query = """
+            SELECT d.NAME as name, a.ROADNAME as roadname, a.NUMBER as number, a.CITY as city, a.ZIPCODE as zipcode
+            FROM DRIVER d
+            JOIN ADDRESS a ON d.ROADNAME = a.ROADNAME AND d.NUMBER = a.NUMBER AND d.CITY = a.CITY
+            WHERE d.NAME = %s
+       """
+       cur.execute(query, (name,))
+       driver=cur.fetchone()
+       
+       if driver:
+         driver_dict = dict(driver)
+         # Use driver name as the identity for the token
+         access_token = create_access_token(identity=name, additional_claims={"user_type": "driver"})
+         return jsonify(access_token=access_token, driver=driver_dict, message="Login successful"), 200
+       else:
+          return jsonify({"error": "Invalid driver name"}), 401 # Unauthorized
+    except Exception as e:
+       print(f"Error in driver login: {e}")
+       return jsonify({"error": "Failed to process login"}), 500
+    finally:
+       cur.close()
+       conn.close()
+
+@app.route('/api/drivers/address', methods=['PUT']) # Use PUT for update
+@jwt_required()
+def update_driver_address():
+    driver_name = get_jwt_identity() # Get driver name from token
+    data = request.get_json()
+
+    new_roadname = data.get('roadname')
+    new_number = data.get('number')
+    new_city = data.get('city')
+    new_zipcode = data.get('zipcode') # Include zipcode
+
+    if not new_roadname or not new_number or not new_city or not new_zipcode:
+        return jsonify({"error": "Missing required address fields (roadname, number, city, zipcode)"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Step 1: Upsert the new address into the ADDRESS table
+        # ON CONFLICT targets the primary key of ADDRESS
+        upsert_address_query = """
+            INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (ROADNAME, NUMBER, CITY) DO NOTHING;
+        """
+        cur.execute(upsert_address_query, (new_roadname, new_number, new_city, new_zipcode))
+
+        # Step 2: Update the DRIVER table to reference the new address
+        update_driver_query = """
+            UPDATE DRIVER
+            SET ROADNAME = %s, NUMBER = %s, CITY = %s
+            WHERE NAME = %s;
+        """
+        cur.execute(update_driver_query, (new_roadname, new_number, new_city, driver_name))
+
+        conn.commit()
+
+        # Optionally, return the updated address details
+        updated_address = {
+            "roadname": new_roadname,
+            "number": new_number,
+            "city": new_city,
+            "zipcode": new_zipcode
+        }
+        return jsonify({"message": "Address updated successfully", "address": updated_address}), 200
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error updating driver address for {driver_name}: {e}")
+        return jsonify({"error": f"Failed to update address: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/drivers/drivable-models', methods=['POST'])
+@jwt_required()
+def declare_drivable_model():
+    driver_name = get_jwt_identity()
+    data = request.get_json()
+    car_id = data.get('car_id') # Expecting CARID from frontend
+
+    if not car_id:
+        return jsonify({"error": "Missing required field: car_id"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Step 1: Find the MODELID associated with the CARID
+        # Assuming there's a direct mapping or a default MODELID per CARID in MODEL table
+        cur.execute("SELECT MODELID FROM MODEL WHERE CARID = %s LIMIT 1", (car_id,))
+        model_result = cur.fetchone()
+
+        if not model_result:
+            # If no model found for this car, maybe the car hasn't been fully setup in MODEL table?
+            return jsonify({"error": f"No model details found for CARID {car_id}"}), 404
+        
+        model_id = model_result[0] # Extract MODELID
+
+        # Step 2: Insert into DRIVES table
+        insert_drives_query = """
+            INSERT INTO DRIVES (NAME, MODELID, CARID)
+            VALUES (%s, %s, %s);
+        """
+        cur.execute(insert_drives_query, (driver_name, model_id, car_id))
+        conn.commit()
+        
+        return jsonify({"message": f"Model {car_id} declared as drivable successfully"}), 201
+
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback() # Important to rollback after error
+        # This means the driver already declared this model
+        return jsonify({"error": f"Model {car_id} is already declared as drivable for this driver"}), 409 # Conflict
+
+    except psycopg2.errors.ForeignKeyViolation as e:
+        conn.rollback()
+        # Could happen if driver_name or model_id/car_id doesn't exist (though JWT/previous check should prevent this)
+        print(f"Foreign key violation declaring drivable model: {e}")
+        return jsonify({"error": f"Invalid driver or model details: {e}"}), 400
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error declaring drivable model for {driver_name}: {e}")
+        return jsonify({"error": f"Failed to declare drivable model: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__=="__main__":
   app.run(debug=True, port=5000)
