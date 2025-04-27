@@ -43,47 +43,36 @@ def register_manager():
     name = data.get('name')
     ssn = data.get('ssn')
     email = data.get('email')
-    pincode = data.get('pincode') # Get the pincode from the request
+    pincode = data.get('pincode') # Get the pincode again
 
-    if not name or not ssn or not email:
-        return jsonify({"error": "Missing required fields (name, ssn, email)"}), 400
+    # Check for required fields, including pincode now
+    if not name or not ssn or not email or not pincode:
+        return jsonify({"error": "Missing required fields (name, ssn, email, pincode)"}), 400
 
+    # --- Always check the pincode --- 
+    if pincode != '1234':
+        return jsonify({"error": "Invalid pincode for manager registration."}), 403 # Forbidden
+
+    # --- Pincode is correct, proceed with database operations ---
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Database connection Failed"}), 500
 
     cur = conn.cursor()
     try:
-        # Step 1: Check if ANY manager already exists
-        cur.execute("SELECT 1 FROM MANAGER LIMIT 1")
-        manager_exists = cur.fetchone()
+        # Removed the check for manager_exists (we allow multiple registrations)
+        
+        # Check if SSN or Email already exists
+        cur.execute("SELECT SSN FROM MANAGER WHERE SSN=%s OR EMAIL=%s", (ssn, email))
+        existing_ssn_email = cur.fetchone()
+        if existing_ssn_email:
+            return jsonify({"error": "Manager with this SSN or Email already exists"}), 409
 
-        if manager_exists:
-            # If any manager exists, registration is closed
-            return jsonify({"error": "Manager registration is closed."}), 403 # Forbidden
-        else:
-            # No managers exist, this is the first registration attempt
-            # Check the pincode for the first registration
-            # Ensure pincode is provided for the first registration
-            if not pincode:
-                 return jsonify({"error": "Pincode required for initial manager registration."}), 400
-                 
-            if pincode != '1234': # Compare with the required pincode
-                return jsonify({"error": "Invalid pincode for initial registration."}), 403 # Forbidden
-
-            # Pincode is correct for the first registration, proceed with checks and insertion
-            # Check if SSN or Email already exists (shouldn't happen if table is empty, but good practice)
-            cur.execute("SELECT SSN FROM MANAGER WHERE SSN=%s OR EMAIL=%s", (ssn, email))
-            existing_ssn_email = cur.fetchone()
-            if existing_ssn_email:
-                # This case is technically unreachable if manager_exists check is accurate
-                # but kept for logical completeness.
-                return jsonify({"error": "Manager with this SSN or Email already exists"}), 409
-
-            # Insert the first manager
-            cur.execute("INSERT INTO MANAGER (NAME, SSN, EMAIL) VALUES(%s, %s, %s)", (name, ssn, email))
-            conn.commit()
-            return jsonify({"message": "Initial manager registered successfully"}), 201
+        # Insert the new manager
+        cur.execute("INSERT INTO MANAGER (NAME, SSN, EMAIL) VALUES(%s, %s, %s)", (name, ssn, email))
+        conn.commit()
+        # General success message is appropriate
+        return jsonify({"message": "Manager registered successfully"}), 201
 
     except Exception as e:
         conn.rollback()

@@ -41,9 +41,5 @@ Managers have access to various reports for analyzing system performance:
 *   **Problematic Local Drivers:** Displays a list of drivers whose address is in 'Chicago', have an average rating below 2.5, and have driven in at least two separate rents booked by at least two distinct clients who also have an address in 'Chicago'.
 *   **Car Brand Performance:** Displays statistics for each car brand (Make), including the average rating of drivers who can drive at least one model of that brand, and the total number of rents involving a model of that brand.
 
-### 5. Enhanced Appearance with CSS3
-
-The styles for the manager component have been improved using modern CSS3 techniques (like CSS variables, Flexbox with `gap`, `box-shadow`) to provide a more user-friendly, responsive appearance that supports system light/dark themes.
-
----
-*This explanation file is based on the features implemented up to this point.* 
+#############################
+#Client section 
