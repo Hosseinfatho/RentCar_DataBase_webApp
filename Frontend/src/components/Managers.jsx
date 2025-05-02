@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import './component.css'; // Add a CSS import for component-specific styles
+import './component.css'; 
 
-// Base URL for the backend API
 const API_URL = 'http://localhost:5001/api'; // Corrected port to 5001
 
 function Managers() {
@@ -9,24 +8,24 @@ function Managers() {
   const [regSsn, setRegSsn] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPinCode, setRegPinCode] = useState('');
-  const [regMessage, setRegMessage] = useState(''); // To show registration success/error
+  const [regMessage, setRegMessage] = useState(''); 
 
   //state for login
   const [loginSsn, setLoginSsn] = useState('');
-  const [loginMessage, setLoginMessage] = useState(''); // To show login success/error
+  const [loginMessage, setLoginMessage] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [managerInfo, setManagerInfo] = useState(null); // Store logged in manager's info
+  const [managerInfo, setManagerInfo] = useState(null); 
 
   //state for add remove
   const [carMake, setCarMake] = useState('');
   const [carModel, setCarModel] = useState('');
   const [carYear, setCarYear] = useState('');
-  const [carMessage, setCarMessage] = useState(''); // To show car add/remove success/error
+  const [carMessage, setCarMessage] = useState(''); 
 
   //state for top-k
   const [kValue, setKValue] = useState('');
   const [topKClients, setTopKClients] = useState([]);
-  const [topKMessage, setTopKMessage] = useState(''); // Optional: Message for top-k results
+  const [topKMessage, setTopKMessage] = useState('');
 
   // --- States for Driver Management ---
   const [driverName, setDriverName] = useState('');
@@ -34,7 +33,7 @@ function Managers() {
   const [driverNumber, setDriverNumber] = useState('');
   const [driverCity, setDriverCity] = useState('');
   const [driverZipCode, setDriverZipCode] = useState('');
-  const [driverMessage, setDriverMessage] = useState(''); // Message for driver ops
+  const [driverMessage, setDriverMessage] = useState(''); 
 
   // --- State for Model Rent Report ---
   const [modelRentReport, setModelRentReport] = useState([]);
@@ -61,25 +60,23 @@ function Managers() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setRegMessage('');
-    // Log with masked pincode
     console.log('Attempting to register Manager:', { name: regName, ssn: regSsn, email: regEmail, pincode: '****' });
 
     try {
       const response = await fetch(`${API_URL}/managers/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // --- Include pincode in the request body again --- !!
         body: JSON.stringify({ name: regName, ssn: regSsn, email: regEmail, pincode: regPinCode }),
       });
 
       const data = await response.json();
 
-      if (response.ok) { // Status 201 Created
+      if (response.ok) { 
         setRegMessage(data.message || 'Registration successful! You can now login.');
         setRegName('');
         setRegSsn('');
         setRegEmail('');
-        setRegPinCode(''); // Clear pincode field
+        setRegPinCode(''); 
       } else {
         setRegMessage(`Registration failed: ${data.error || response.statusText}`);
       }
@@ -106,14 +103,13 @@ function Managers() {
         setLoginMessage('Login successful!');
         setIsLoggedIn(true);
         setManagerInfo(data.manager);
-        // --- Store the token --- (Use localStorage to persist across sessions)
         localStorage.setItem('manager_access_token', data.access_token);
         setLoginSsn('');
       } else {
         setLoginMessage(`Login failed: ${data.error || response.statusText}`);
         setIsLoggedIn(false);
         setManagerInfo(null);
-        localStorage.removeItem('manager_access_token'); // Ensure token is removed on failed login
+        localStorage.removeItem('manager_access_token'); 
       }
     } catch (error) {
       console.error('Login network error:', error);
@@ -131,25 +127,23 @@ function Managers() {
     setRegMessage('');
     setCarMessage('');
     setTopKMessage('');
-    setDriverMessage(''); // Clear driver message on logout
-    setModelRentMessage(''); // Clear model report message
-    setDriverStatsMessage(''); // Clear driver stats message
-    setCityCriteriaMessage(''); // Clear city criteria message
-    setProblematicDriversMessage(''); // Clear problematic driver message
-    setBrandStatsMessage(''); // Clear brand stats message
-    // Clear form states
+    setDriverMessage(''); 
+    setModelRentMessage(''); 
+    setDriverStatsMessage(''); 
+    setCityCriteriaMessage(''); 
+    setProblematicDriversMessage(''); 
+    setBrandStatsMessage(''); 
     setCarMake(''); setCarModel(''); setCarYear('');
     setKValue('');
     setDriverName(''); setDriverRoadName(''); setDriverNumber(''); setDriverCity(''); setDriverZipCode('');
-    setClientCity1(''); setDriverCity2(''); // Clear city inputs
-    // Clear report data
+    setClientCity1(''); setDriverCity2(''); 
     setTopKClients([]);
-    setModelRentReport([]); // Clear model report data
-    setDriverStatsReport([]); // Clear driver stats data
-    setCityCriteriaClients([]); // Clear city criteria data
-    setProblematicDrivers([]); // Clear problematic driver data
-    setBrandStatsReport([]); // Clear brand stats data
-    setRegPinCode(''); // Re-add clearing pincode on logout
+    setModelRentReport([]); 
+    setDriverStatsReport([]); 
+    setCityCriteriaClients([]); 
+    setProblematicDrivers([]); 
+    setBrandStatsReport([]); 
+    setRegPinCode(''); 
     localStorage.removeItem('manager_access_token');
   };
 
@@ -158,11 +152,10 @@ function Managers() {
     setCarMessage('');
     console.log('Attempting to add car:', { make: carMake, model: carModel, year: carYear });
 
-    // --- Get token from localStorage --- !!
     const token = localStorage.getItem('manager_access_token');
     if (!token) {
       setCarMessage("Error: Authentication token not found. Please login again.");
-      setIsLoggedIn(false); // Force re-login if token is missing
+      setIsLoggedIn(false); 
       setManagerInfo(null);
       return;
     }
@@ -172,7 +165,6 @@ function Managers() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // --- Add Authorization header --- !!
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ make: carMake, model: carModel, year: carYear }),
@@ -186,7 +178,6 @@ function Managers() {
         setCarModel('');
         setCarYear('');
       } else {
-        // Check for specific auth errors (e.g., 401 Unauthorized, 422 Unprocessable Entity for expired/invalid token)
         if (response.status === 401 || response.status === 422) {
            setCarMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
            handleLogout(); // Log out user if token is invalid/expired
@@ -205,7 +196,6 @@ function Managers() {
     setCarMessage('');
     console.log('Attempting to remove car:', { make: carMake, model: carModel, year: carYear });
 
-    // --- Get token from localStorage --- !!
     const token = localStorage.getItem('manager_access_token');
     if (!token) {
       setCarMessage("Error: Authentication token not found. Please login again.");
@@ -224,7 +214,6 @@ function Managers() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // --- Add Authorization header --- !!
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ make: carMake, model: carModel, year: carYear }),
@@ -250,14 +239,14 @@ function Managers() {
 
   const handelGetTopKClients = async (e) => {
     e.preventDefault();
-    setTopKMessage(''); // Clear previous message
-    setTopKClients([]); // Clear previous results
+    setTopKMessage(''); 
+    setTopKClients([]); 
     console.log('Requesting top k clients', { k: kValue });
 
     const token = localStorage.getItem('manager_access_token');
     if (!token) {
       setTopKMessage("Error: Authentication token not found. Please login again.");
-      handleLogout(); // Logout if no token
+      handleLogout();
       return;
     }
     if (!kValue || kValue <= 0) {
@@ -268,9 +257,8 @@ function Managers() {
     try {
       // --- Actual API Call --- !!
       const response = await fetch(`${API_URL}/managers/reports/top-clients?k=${kValue}`, {
-        method: 'GET', // Use GET method
+        method: 'GET', 
         headers: {
-          // --- Add Authorization header --- !!
           'Authorization': `Bearer ${token}`
         }
       });
@@ -280,7 +268,7 @@ function Managers() {
       if (response.ok) {
         if (data.clients && data.clients.length > 0) {
            setTopKClients(data.clients);
-           setTopKMessage(''); // Clear any previous error message
+           setTopKMessage(''); 
         } else {
            setTopKClients([]);
            setTopKMessage(`No client rental data found.`);
@@ -302,7 +290,6 @@ function Managers() {
     }
   };
 
-  // --- Driver Management Handlers ---
 
   const handleAddDriver = async (e) => {
     e.preventDefault();
@@ -381,14 +368,13 @@ function Managers() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: driverName }), // Only need name to remove
+        body: JSON.stringify({ name: driverName }), 
       });
       const data = await response.json();
 
       if (response.ok) {
         setDriverMessage(data.message || "Driver removed successfully!");
-        // Optionally clear the name field
-        // setDriverName('');
+   
       } else {
         if (response.status === 401 || response.status === 422) {
           setDriverMessage(`Authentication error: ${data.msg || data.error || response.statusText}. Please login again.`);
@@ -403,10 +389,9 @@ function Managers() {
     }
   };
 
-  // --- Model Rent Report Handler ---
   const handleGenerateModelReport = async () => {
-    setModelRentMessage(''); // Clear previous message
-    setModelRentReport([]); // Clear previous report
+    setModelRentMessage(''); 
+    setModelRentReport([]); 
     console.log('Requesting model rent report');
 
     const token = localStorage.getItem('manager_access_token');
@@ -445,7 +430,6 @@ function Managers() {
     }
   };
 
-  // --- Driver Stats Report Handler ---
   const handleGenerateDriverReport = async () => {
     setDriverStatsMessage(''); // Clear previous message
     setDriverStatsReport([]); // Clear previous report
@@ -487,7 +471,6 @@ function Managers() {
     }
   };
 
-  // --- City Criteria Report Handler ---
   const handleGenerateCityCriteriaReport = async (e) => {
     e.preventDefault(); // Prevent default form submission
     setCityCriteriaMessage('');
@@ -538,7 +521,6 @@ function Managers() {
     }
   };
 
-  // --- Problematic Drivers Report Handler ---
   const handleGenerateProblematicDriversReport = async () => {
     setProblematicDriversMessage('');
     setProblematicDrivers([]);
@@ -580,7 +562,6 @@ function Managers() {
     }
   };
 
-  // --- Brand Stats Report Handler ---
   const handleGenerateBrandReport = async () => {
     setBrandStatsMessage('');
     setBrandStatsReport([]);
@@ -793,11 +774,7 @@ function Managers() {
                  </table>
                 {/* Alternative: Simple list */}
                 {/* <ul>
-                  {modelRentReport.map((item, index) => (
-                    <li key={index}>
-                      {item.make} {item.model} ({item.year}) - Rents: {item.rent_count}
-                    </li>
-                  ))}
+                
                 </ul> */} 
               </div>
             )}

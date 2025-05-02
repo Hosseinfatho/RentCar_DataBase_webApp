@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react'; // Import hooks
-import './component.css'; // Add a CSS import for component-specific styles
+import React, { useState, useEffect } from 'react'; 
+import './component.css'; 
 
-// --- Helper function for simple ID generation ---
 const generateId = () => `_${Math.random().toString(36).substr(2, 9)}`;
 
 function Clients() {
-  // --- State Variables ---
-  // Login/Register
   const [loginEmail, setLoginEmail] = useState('');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  // --- Modified for multiple addresses/cards ---
   const [addresses, setAddresses] = useState([]);
   const [creditCards, setCreditCards] = useState([]);
-  // State for the *current* address/card being entered
   const [currentAddress, setCurrentAddress] = useState({ id: generateId(), street: '', city: '', zip: '' });
   const [currentCard, setCurrentCard] = useState({ id: generateId(), number: '', expiry: '', cvv: '', billingAddress: '' }); // Added billingAddress
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -42,41 +37,34 @@ function Clients() {
   const handleLogin = (e) => {
     e.preventDefault();
     console.log('Logging in Client:', loginEmail);
-    // TODO: API Call to backend to verify email
     // On success:
     setIsLoggedIn(true);
-    setClientInfo({ name: 'Test Client', email: loginEmail }); // Simulate fetch
-    fetchBookedRents(loginEmail); // Fetch rents on login
+    setClientInfo({ name: 'Test Client', email: loginEmail }); 
+    fetchBookedRents(loginEmail); 
   };
 
   const handleRegister = (e) => {
     e.preventDefault();
-    // --- Modified to include arrays ---
     if (addresses.length === 0 || creditCards.length === 0) {
-      alert("Please add at least one address and one credit card."); // Basic validation
+      alert("Please add at least one address and one credit card."); 
       return;
     }
     console.log('Registering Client:', { name: regName, email: regEmail, addresses: addresses, creditCards: creditCards });
-    // TODO: API Call to backend to register client with name, email, addresses array, creditCards array
-    // On success, maybe log them in:
     setIsLoggedIn(true);
     setClientInfo({ name: regName, email: regEmail });
-    // fetchBookedRents(regEmail); // Fetch rents after registration if needed
-    // Clear registration form state after successful registration (optional)
     setRegName('');
     setRegEmail('');
     setAddresses([]);
     setCreditCards([]);
     setCurrentAddress({ id: generateId(), street: '', city: '', zip: '' });
     setCurrentCard({ id: generateId(), number: '', expiry: '', cvv: '', billingAddress: '' });
-    // --- End Modification ---
   };
 
-  const handleCheckAvailability = async (e) => { // Make function async
+  const handleCheckAvailability = async (e) => { 
     e.preventDefault();
     console.log('Checking availability for date:', checkDate);
-    setAvailableModels([]); // Clear previous results
-    setBookingStatus(''); // Clear previous booking status
+    setAvailableModels([]); 
+    setBookingStatus(''); 
 
     if (!checkDate) {
         alert("Please select a date first.");
@@ -87,7 +75,6 @@ function Clients() {
         // --- API Call to Backend --- 
         const response = await fetch(`http://localhost:5001/api/cars/available?date=${checkDate}`);
         if (!response.ok) {
-            // Handle server errors (e.g., 500) or specific errors (e.g., 400)
             const errorData = await response.json().catch(() => ({ error: "Failed to fetch available cars. Server error." })); 
             console.error("Error fetching available cars:", response.status, errorData);
             alert(errorData.error || "An error occurred while checking availability.");
@@ -98,36 +85,24 @@ function Clients() {
         console.log("Available models received:", data.available_models);
 
         if (data.available_models && data.available_models.length > 0) {
-            setAvailableModels(data.available_models); // Assuming backend returns { available_models: [...] }
-            setBookDate(checkDate); // Pre-fill booking date
+            setAvailableModels(data.available_models); 
+            setBookDate(checkDate); 
         } else {
-             setAvailableModels([]); // Ensure it's an empty array if none found
-             setBookingStatus("No models available for the selected date."); // Inform user
+             setAvailableModels([]); 
+             setBookingStatus("No models available for the selected date."); 
         }
-        // --- End API Call Handling ---
 
     } catch (error) {
-        // Handle network errors or other JS errors during fetch
         console.error('Network or other error during fetch:', error);
         alert("Could not connect to the server to check availability. Please try again later.");
     }
 
-    // Remove simulation code
-    /*
-    // Simulate result:
-    setAvailableModels([
-      { id: 1, make: 'Toyota', model: 'Camry', year: 2022 },
-      { id: 2, make: 'Honda', model: 'Civic', year: 2023 },
-    ]);
-    setBookDate(checkDate); // Pre-fill booking date
-    */
   };
 
   const handleBookRent = async (e) => { // Make async
     e.preventDefault();
     setBookingStatus('Processing...'); // Give feedback
 
-    // Ensure modelId and date are selected
     if (!bookModelId || !bookDate) {
       setBookingStatus('Please check availability and select a model first.');
       return;
@@ -135,17 +110,13 @@ function Clients() {
 
     console.log('Attempting to book rent for modelId:', bookModelId, 'on date:', bookDate);
 
-    // --- Retrieve JWT token (assuming it's stored in localStorage) ---
     const token = localStorage.getItem('client_access_token'); // Adjust key if needed
     if (!token) {
         setBookingStatus('Error: You must be logged in to book.');
-        // Optionally redirect to login
         return;
     }
-    // --- End JWT retrieval ---
 
     try {
-        // --- API Call to Backend --- 
         const response = await fetch('/api/clients/rents', { // Target the new booking endpoint
             method: 'POST',
             headers: {
@@ -167,31 +138,17 @@ function Clients() {
             return;
         }
         
-        // On success:
         console.log("Booking successful:", data);
         setBookingStatus(data.message || `Successfully booked model ${bookModelId} for ${bookDate}!`);
         fetchBookedRents(clientInfo?.email); // Refresh booked rents list
         setAvailableModels([]); // Clear availability list after booking
         setBookModelId(''); // Reset selection
 
-        // --- End API Call Handling ---
-
     } catch (error) {
-        // Handle network errors or other JS errors
         console.error('Network or other error during booking:', error);
         setBookingStatus("Could not connect to the server to book the rent. Please try again later.");
     }
 
-    // Remove old simulation code
-    /*
-    console.log('Booking rent for model:', bookModelId, 'on date:', bookDate);
-    // TODO: API Call to backend to book rent
-    // On success:
-    setBookingStatus(`Successfully booked model ${bookModelId} for ${bookDate}! Driver will be assigned.`);
-    fetchBookedRents(clientInfo?.email); // Refresh booked rents
-    // On failure:
-    // setBookingStatus('Failed to book rent. Model might no longer be available.');
-    */
   };
 
   const fetchBookedRents = async (clientEmail) => { // Make async
@@ -231,42 +188,27 @@ function Clients() {
         console.log("Booked rents received:", data.rents);
 
         if (data.rents) {
-             // Ensure the data format matches what the list rendering expects
-            // The backend should return objects with { rentId, date, model, driver }
             setBookedRents(data.rents); 
         } else {
             setBookedRents([]); // Set to empty if no rents found or unexpected format
         }
-        // --- End API Call Handling ---
 
     } catch (error) {
         console.error('Network or other error fetching rents:', error);
         setBookedRents([]); // Clear possibly stale data on error
-        // Maybe show a network error message
     }
 
-    // Remove simulation code
-    /*
-    console.log('Fetching booked rents for:', clientEmail);
-    // TODO: API Call to backend to get rents for this client
-    // Simulate result:
-    setBookedRents([
-      { rentId: 101, date: '2024-10-20', model: 'Toyota Camry', driver: 'Hossein Fatho' },
-    ]);
-    */
   };
 
   const handleSubmitReview = async (e) => { // Make async
     e.preventDefault();
     setReviewStatus('Submitting...'); // Feedback
 
-    // Frontend validation
     if (!reviewDriverId || !reviewRating) { // reviewDriverId holds the driver name here
       setReviewStatus('Please select a driver and provide a rating.');
       return;
     }
 
-    // Validate rating format (basic)
     const ratingNum = parseInt(reviewRating, 10);
     if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
         setReviewStatus('Rating must be a number between 1 and 5.');
@@ -275,30 +217,28 @@ function Clients() {
 
     console.log('Submitting review for driver:', reviewDriverId, 'Rating:', ratingNum, 'Comment:', reviewComment);
 
-    // --- Retrieve JWT token ---
     const token = localStorage.getItem('client_access_token'); // Adjust key if needed
     if (!token) {
         setReviewStatus('Error: You must be logged in to submit a review.');
         return;
     }
-    // --- End JWT retrieval ---
 
     try {
         // --- API Call to Backend --- 
-        const response = await fetch('/api/clients/reviews', { // Target the new review endpoint
+        const response = await fetch('/api/clients/reviews', { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // Send JWT token
+                'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({ 
-                driverName: reviewDriverId, // Send the selected driver name
-                rating: ratingNum,          // Send the parsed rating number
-                comment: reviewComment      // Send the comment
+                driverName: reviewDriverId, 
+                rating: ratingNum,         
+                comment: reviewComment     
             })
         });
 
-        const data = await response.json(); // Parse JSON regardless of status
+        const data = await response.json(); 
 
         if (!response.ok) {
             // Handle errors from backend (e.g., 400, 403, 404, 500)
@@ -312,43 +252,23 @@ function Clients() {
             return;
         }
         
-        // On success:
         console.log("Review submitted successfully:", data);
         setReviewStatus(data.message || 'Review submitted successfully!');
-        // Clear the form
         setReviewDriverId('');
         setReviewRating('');
         setReviewComment('');
 
-        // --- End API Call Handling ---
-
     } catch (error) {
-        // Handle network errors or other JS errors
         console.error('Network or other error submitting review:', error);
         setReviewStatus("Could not connect to the server to submit the review. Please try again later.");
     }
 
-    // Remove old simulation code
-    /*
-    if (!reviewDriverId || !reviewRating) {
-      setReviewStatus('Please select a driver and rating.');
-      return;
-    }
-    console.log('Submitting review:', { driverId: reviewDriverId, rating: reviewRating, comment: reviewComment });
-    // TODO: API Call to backend to submit review (backend validates if driver was used by client)
-    // On success:
-    setReviewStatus('Review submitted successfully!');
-    // On failure (e.g., driver not associated with client rents):
-    // setReviewStatus('Error: Cannot review this driver.');
-    */
   };
 
-  // Add handler for requirement 6 if needed
-  const handleBookBestDriver = async (e) => { // Make async
+  const handleBookBestDriver = async (e) => { 
      e.preventDefault();
-     setBookingStatus('Processing booking with best driver...'); // Feedback
+     setBookingStatus('Processing booking with best driver...'); 
 
-     // Ensure modelId and date are selected (same as handleBookRent)
      if (!bookModelId || !bookDate) {
        setBookingStatus('Please check availability and select a model first.');
        return;
@@ -357,20 +277,18 @@ function Clients() {
      console.log('Attempting to book rent with BEST driver for modelId:', bookModelId, 'on date:', bookDate);
 
      // --- Retrieve JWT token --- 
-     const token = localStorage.getItem('client_access_token'); // Adjust key if needed
+     const token = localStorage.getItem('client_access_token'); 
      if (!token) {
          setBookingStatus('Error: You must be logged in to book.');
          return;
      }
-     // --- End JWT retrieval ---
 
      try {
-         // --- API Call to Backend --- 
-         const response = await fetch('/api/clients/rents/best-driver', { // Target the new endpoint
+         const response = await fetch('/api/clients/rents/best-driver', { 
              method: 'POST',
              headers: {
                  'Content-Type': 'application/json',
-                 'Authorization': `Bearer ${token}` // Send JWT token
+                 'Authorization': `Bearer ${token}` 
              },
              body: JSON.stringify({ 
                  modelId: bookModelId,
@@ -378,41 +296,28 @@ function Clients() {
              })
          });
 
-         const data = await response.json(); // Parse JSON regardless of status
+         const data = await response.json(); 
 
          if (!response.ok) {
-             // Handle errors from backend
              console.error("Booking with best driver failed:", response.status, data);
              setBookingStatus(data.error || `Failed to book rent with best driver (Status: ${response.status}).`);
              return;
          }
          
-         // On success:
          console.log("Booking with best driver successful:", data);
          setBookingStatus(data.message || `Successfully booked model ${bookModelId} with BEST driver for ${bookDate}!`);
          fetchBookedRents(clientInfo?.email); // Refresh booked rents list
-         setAvailableModels([]); // Clear availability list
-         setBookModelId(''); // Reset selection
+         setAvailableModels([]); 
+         setBookModelId(''); 
 
-         // --- End API Call Handling ---
 
      } catch (error) {
-         // Handle network errors
          console.error('Network or other error during best driver booking:', error);
          setBookingStatus("Could not connect to the server to book the rent. Please try again later.");
      }
 
-     // Remove old simulation code
-     /*
-     // Similar to handleBookRent, but with different backend endpoint/parameter
-     console.log('Booking rent with BEST driver for model:', bookModelId, 'on date:', bookDate);
-     // TODO: API call to backend
-     setBookingStatus(`Successfully booked model ${bookModelId} with BEST driver for ${bookDate}!`);
-     fetchBookedRents(clientInfo?.email);
-     */
   }
 
-  // --- New Handlers for Address/Card Management ---
   const handleAddressChange = (e) => {
     const { name, value } = e.target;
     setCurrentAddress(prev => ({ ...prev, [name]: value }));

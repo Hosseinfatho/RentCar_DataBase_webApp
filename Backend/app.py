@@ -35,7 +35,7 @@ def get_db_connection():
 @app.route('/',methods=['GET'])
 def home():
   return "🚖 Taxi Rental API is live!"
-
+################################################################
 # manager rout
 # register manager with SSN , Name , Email
 @app.route('/api/managers/register', methods=['POST'])
@@ -46,22 +46,18 @@ def register_manager():
     email = data.get('email')
     pincode = data.get('pincode') # Get the pincode again
 
-    # Check for required fields, including pincode now
     if not name or not ssn or not email or not pincode:
         return jsonify({"error": "Missing required fields (name, ssn, email, pincode)"}), 400
 
-    # --- Always check the pincode --- 
     if pincode != '1234':
         return jsonify({"error": "Invalid pincode for manager registration."}), 403 # Forbidden
 
-    # --- Pincode is correct, proceed with database operations ---
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Database connection Failed"}), 500
 
     cur = conn.cursor()
     try:
-        # Removed the check for manager_exists (we allow multiple registrations)
         
         # Check if SSN or Email already exists
         cur.execute("SELECT SSN FROM MANAGER WHERE SSN=%s OR EMAIL=%s", (ssn, email))
@@ -98,15 +94,12 @@ def login_manager():
 
    try:
       # Use correct table (MANAGER) and column (SSN) names.
-      # Select specific columns and alias them to lowercase for frontend compatibility.
       cur.execute("SELECT NAME AS name, SSN AS ssn, EMAIL AS email FROM MANAGER WHERE SSN=%s", (ssn,))
       manager=cur.fetchone()
       if manager:
-        # The keys in manager_dict will now be lowercase ('name', 'ssn', 'email') due to aliasing
         manager_dict=dict(manager)
         # --- Generate JWT Token --- Use SSN as the identity
         access_token = create_access_token(identity=ssn)
-        # --- Return token along with success message and manager info ---
         return jsonify(access_token=access_token, manager=manager_dict, message="Login successful"), 200
       else:
          return jsonify({"error": "Invalid ssn"}), 401
@@ -122,12 +115,7 @@ def login_manager():
 @app.route('/api/managers/cars', methods=['POST'])
 @jwt_required() # Protect this route
 def add_car():
-    # Authentication check is now handled by @jwt_required()
-    # We can get the identity of the logged-in manager if needed:
-    # from flask_jwt_extended import get_jwt_identity
-    # current_manager_ssn = get_jwt_identity()
-    # print(f"Request by manager SSN: {current_manager_ssn}")
-
+  
     # TODO: Add authentication check to ensure only logged-in managers can access
     data = request.get_json()
     make = data.get('make')
@@ -159,9 +147,6 @@ def add_car():
         insert_car_query = "INSERT INTO CAR (CARID, MAKE, MODEL, YEAR) VALUES (%s, %s, %s, %s)"
         cur.execute(insert_car_query, (car_id, make, model, year))
 
-        # --- Generate unique MODELID and insert into MODEL table --- 
-        # Assuming MODEL table links CARID to a MODELID
-        # If MODEL table has other required columns, this needs adjustment.
         while True:
             model_id = uuid.uuid4().hex[:12].upper() # Generate a potential MODELID (adjust length if needed)
             # Check if MODELID already exists (assuming MODELID is unique/primary key)
@@ -169,22 +154,17 @@ def add_car():
             if not cur.fetchone():
                 break # Found unique MODELID
         
-        # Insert into MODEL table (assuming columns MODELID, CARID)
         insert_model_query = "INSERT INTO MODEL (MODELID, CARID) VALUES (%s, %s)" 
         cur.execute(insert_model_query, (model_id, car_id))
         
-        # --- Commit transaction --- 
         conn.commit()
-        # Return success message including the generated CARID
         return jsonify({"message": "Car and associated model added successfully", "carId": car_id, "modelId": model_id}), 201
 
     except Exception as e:
         conn.rollback()
         print(f"Error adding car/model: {e}")
-        # Check for specific errors
         if isinstance(e, psycopg2.errors.ForeignKeyViolation):
              return jsonify({"error": f"Failed to add model due to foreign key constraint: {e}"}), 400
-        # Add other specific error checks if needed
         return jsonify({"error": f"Failed to add car/model: {e}"}), 500
     finally:
         cur.close()
@@ -193,7 +173,6 @@ def add_car():
 @app.route('/api/managers/cars/remove', methods=['POST'])
 @jwt_required() # Protect this route
 def remove_car():
-    # Authentication check handled by @jwt_required()
     data = request.get_json()
     make = data.get('make')
     model = data.get('model')
@@ -213,7 +192,6 @@ def remove_car():
 
     cur = conn.cursor()
     try:
-        # Find the CARID of the first car matching the criteria
         cur.execute(
             "SELECT CARID FROM CAR WHERE MAKE = %s AND MODEL = %s AND YEAR = %s LIMIT 1",
             (make, model, year)
@@ -224,22 +202,18 @@ def remove_car():
             return jsonify({"error": "No car found matching the criteria"}), 404 # Not Found
 
         car_id_to_delete = car_to_delete[0]
-        # Check MODEL table
         cur.execute("SELECT 1 FROM MODEL WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
         if cur.fetchone():
             return jsonify({"error": "Cannot remove car: It is referenced in the MODEL table. Remove associated models first."}), 409 # Conflict
 
-        # Check RENT table
         cur.execute("SELECT 1 FROM RENT WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
         if cur.fetchone():
             return jsonify({"error": "Cannot remove car: It is referenced in the RENT table. Remove associated rents first."}), 409 # Conflict
 
-        # Check DRIVES table
         cur.execute("SELECT 1 FROM DRIVES WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
         if cur.fetchone():
             return jsonify({"error": "Cannot remove car: It is referenced in the DRIVES table. Remove associated driver assignments first."}), 409 # Conflict
 
-        # If no constraints found, proceed with deletion
         cur.execute("DELETE FROM CAR WHERE CARID = %s", (car_id_to_delete,))
         conn.commit()
 
@@ -252,14 +226,12 @@ def remove_car():
     except Exception as e:
         conn.rollback()
         print(f"Error removing car: {e}")
-        # Check if the error is a foreign key violation (useful for debugging)
-        # e.g. if isinstance(e, psycopg2.errors.ForeignKeyViolation): ...
         return jsonify({"error": f"Failed to remove car: {e}"}), 500
     finally:
         cur.close()
         conn.close()
 
-# --- Endpoint to get all car models (accessible by authenticated users) ---
+# --- Endpoint to get all car models ---
 @app.route('/api/cars/models', methods=['GET'])
 @jwt_required() # Protect route
 def get_all_car_models():
@@ -278,7 +250,6 @@ def get_all_car_models():
         cur.execute(query)
         cars = cur.fetchall()
         
-        # Convert Row objects to simple dictionaries
         cars_list = [dict(car) for car in cars]
         
         return jsonify({"cars": cars_list}), 200
@@ -295,7 +266,7 @@ def get_all_car_models():
 @app.route('/api/managers/reports/top-clients', methods=['GET'])
 @jwt_required()
 
-########################################################################
+######
 # --- Driver Management Routes ---
 def get_top_k_clients():
     k_str = request.args.get('k') # Get k from query parameters (?k=...) 
@@ -314,7 +285,6 @@ def get_top_k_clients():
     if not conn:
         return jsonify({"error": "Database connection failed"}), 500
 
-    # Use dictionary cursor to get results as dicts
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         # Query to count rents per client, order by count descending, limit by k
@@ -352,7 +322,6 @@ def get_model_rent_counts():
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         # Query to count rents per car model (Make, Model, Year)
-        # Left Join CAR with RENT to include cars that have never been rented (count will be 0)
         query = """
             SELECT 
                 c.MAKE AS make, 
@@ -367,7 +336,6 @@ def get_model_rent_counts():
         cur.execute(query)
         model_counts = cur.fetchall()
 
-        # Convert Row objects to simple dictionaries
         report_list = [dict(model) for model in model_counts]
 
         return jsonify({"model_rent_report": report_list}), 200
@@ -706,10 +674,8 @@ def get_driver_stats_report():
 ########################################################################
 
 
-# client api
-
-#drvier api
-
+#              Drvier api
+###########################################################################
 @app.route('/api/drivers/login', methods=['POST'])
 def login_driver():
     data=request.get_json()
@@ -860,7 +826,8 @@ def declare_drivable_model():
     finally:
         cur.close()
         conn.close()
-
+###################################################################
+#Client API
 ########################################################################
 # --- Client Management Routes ---
 
@@ -999,7 +966,6 @@ def login_client():
         cur.close()
         conn.close()
 
-########################################################################
 # --- Car Availability and Booking Routes ---
 
 @app.route('/api/cars/available', methods=['GET'])
@@ -1191,7 +1157,6 @@ def get_client_rents():
         rents_list = [dict(rent) for rent in rents]
         
         # Ensure dates are strings in YYYY-MM-DD format (psycopg2 DictCursor might handle this)
-        # If dates are date objects, convert them:
         for rent_item in rents_list:
             if isinstance(rent_item['date'], date):
                 rent_item['date'] = rent_item['date'].isoformat()
@@ -1252,8 +1217,6 @@ def submit_review():
             return jsonify({"error": "Forbidden: You cannot review a driver you have not rented with."}), 403
 
         # --- Step 3: Generate REVIEWID (if needed) and Insert Review ---
-        # Assuming REVIEW table has columns: REVIEWID, CLIENTID, NAME (driver), RATING, COMMENT
-        # Adjust column names based on your schema.
         # If REVIEWID is auto-generated (SERIAL), remove it from INSERT.
         while True:
              review_id = str(uuid.uuid4()) # Assuming REVIEWID is UUID or similar
@@ -1361,10 +1324,8 @@ def book_rent_with_best_driver():
         """
         cur.execute(insert_rent_query, (rent_id, client_id, rent_date, driver_name, model_id, car_id))
 
-        # --- Commit Transaction ---
         conn.commit()
 
-        # Include driver's name and maybe rating in the success message
         return jsonify({ 
             "message": f"Rent booked successfully with best driver ({driver_name}, Rating: {driver_rating:.2f})! Rent ID: {rent_id}"
         }), 201
@@ -1378,9 +1339,6 @@ def book_rent_with_best_driver():
         conn.close()
 
 if __name__ == '__main__':
-     # Use environment variables for host and port if available, otherwise default
      host = os.getenv('FLASK_RUN_HOST', '127.0.0.1')
      port = int(os.getenv('FLASK_RUN_PORT', 5001)) # Changed default port to 5001
-     # Consider adding debug=True for development, but remove for production
-     # debug = os.getenv('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
      app.run(host=host, port=port) # Add debug=debug if needed

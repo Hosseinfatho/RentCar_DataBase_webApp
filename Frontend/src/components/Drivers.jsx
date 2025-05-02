@@ -1,30 +1,28 @@
 import React, { useState, useEffect } from 'react'; // Import hooks
-import './component.css'; // Add a CSS import for component-specific styles
+import './component.css'; 
 
-// Reuse API_URL - ensure it's accessible here
 const API_URL = 'http://localhost:5001/api'; 
 
 function Drivers() {
   // State for Login
   const [loginName, setLoginName] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentDriverInfo, setCurrentDriverInfo] = useState(null); // Store logged in driver data
-  const [loginMessage, setLoginMessage] = useState(''); // For login feedback
+  const [currentDriverInfo, setCurrentDriverInfo] = useState(null); 
+  const [loginMessage, setLoginMessage] = useState('');
 
   // State for Changing Address
   const [newAddress, setNewAddress] = useState('');
-  const [addressMessage, setAddressMessage] = useState(''); // <-- Add state for address feedback
+  const [addressMessage, setAddressMessage] = useState(''); 
 
   // State for Car Models
-  const [allCarModels, setAllCarModels] = useState([]); // List of all models
-  const [drivableModels, setDrivableModels] = useState([]); // Models the logged-in driver can drive
-  const [selectedModel, setSelectedModel] = useState(''); // Model to add/remove from drivable list
-  const [modelDeclareMessage, setModelDeclareMessage] = useState(''); // <-- Add state for model declaration feedback
+  const [allCarModels, setAllCarModels] = useState([]); 
+  const [drivableModels, setDrivableModels] = useState([]); 
+  const [selectedModel, setSelectedModel] = useState(''); 
+  const [modelDeclareMessage, setModelDeclareMessage] = useState(''); 
 
-  // --- Updated Login Handler ---
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoginMessage(''); // Clear previous messages
+    setLoginMessage(''); 
     console.log('Attempting to login Driver:', loginName);
 
     if (!loginName) {
@@ -33,7 +31,7 @@ function Drivers() {
     }
 
     try {
-        const response = await fetch(`${API_URL}/drivers/login`, { // Use the new endpoint
+        const response = await fetch(`${API_URL}/drivers/login`, { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -50,14 +48,11 @@ function Drivers() {
             // --- Store the token --- 
             localStorage.setItem('driver_access_token', data.access_token);
             
-            // Pre-fill address field with fetched address
-            // Combine address parts for display/editing
             const fullAddress = `${data.driver.roadname || ''} ${data.driver.number || ''}, ${data.driver.city || ''}, ${data.driver.zipcode || ''}`.trim();
             setNewAddress(fullAddress);
             
-            setLoginName(''); // Clear login form
+            setLoginName(''); 
 
-            // Fetch models after successful login
             fetchAllCarModels(); 
             fetchDrivableModels(data.driver.name);
         } else {
@@ -75,7 +70,6 @@ function Drivers() {
     }
   };
 
-  // --- Add Logout Handler ---
   const handleLogout = () => {
       setIsLoggedIn(false);
       setCurrentDriverInfo(null);
@@ -85,15 +79,13 @@ function Drivers() {
       setAllCarModels([]);
       setDrivableModels([]);
       setSelectedModel('');
-      // --- Remove the token --- 
       localStorage.removeItem('driver_access_token'); 
       console.log('Driver logged out');
   };
 
-  // --- Updated Address Change Handler ---
   const handleAddressChange = async (e) => {
     e.preventDefault();
-    setAddressMessage(''); // Clear previous message
+    setAddressMessage(''); 
     const token = localStorage.getItem('driver_access_token');
 
     if (!token) {
@@ -106,9 +98,6 @@ function Drivers() {
         return;
     }
 
-    // --- Simple Address Parsing --- 
-    // Expects format like: "Street Name Number, City Name, Zip Code"
-    // Example: "Elm Street 45, Springfield, 12345"
     const parts = newAddress.split(',').map(part => part.trim());
     let roadname, number, city, zipcode;
 
@@ -118,10 +107,8 @@ function Drivers() {
             roadname = parts[0].substring(0, firstPartSplit).trim();
             number = parts[0].substring(firstPartSplit + 1).trim();
         } else {
-           // Handle cases where street name might not have a number or format is unexpected
-           // For simplicity, assign the whole first part to roadname if no space found
            roadname = parts[0];
-           number = ''; // Or some default/error handling
+           number = ''; 
         }
         city = parts[1];
         zipcode = parts[2];
@@ -130,12 +117,10 @@ function Drivers() {
         return;
     }
 
-    // Basic validation (optional but recommended)
     if (!roadname || !number || !city || !zipcode) {
         setAddressMessage('Could not parse address components. Please check format.');
         return;
     }
-    // --- End Address Parsing ---
 
     console.log('Updating address for', currentDriverInfo?.name, 'to:', { roadname, number, city, zipcode });
 
@@ -161,8 +146,6 @@ function Drivers() {
                 city: data.address.city,
                 zipcode: data.address.zipcode
             });
-            // Optionally clear the input field or update it to the newly confirmed address
-            // setNewAddress(''); 
         } else {
             setAddressMessage(`Address update failed: ${data.error || response.statusText}`);
         }
@@ -172,7 +155,6 @@ function Drivers() {
     }
   };
 
-  // --- Car Model Functions ---
   const fetchAllCarModels = async () => {
     console.log('Fetching all car models from API...');
     const token = localStorage.getItem('driver_access_token');
@@ -210,16 +192,14 @@ function Drivers() {
   };
 
   const fetchDrivableModels = (driverName) => {
-    // TODO: Implement this function to fetch currently drivable models on login
     console.log('(Placeholder) Fetching drivable models for', driverName);
-    // Simulate fetch - **Update to use CARID**
     setDrivableModels(['C001']); // Example placeholder
   };
 
   // --- Updated Declare Drivable Model Handler ---
   const handleDeclareModel = async (e) => {
     e.preventDefault();
-    setModelDeclareMessage(''); // Clear previous message
+    setModelDeclareMessage(''); 
     const token = localStorage.getItem('driver_access_token');
 
     if (!selectedModel) {
@@ -230,7 +210,6 @@ function Drivers() {
         setModelDeclareMessage('Authentication error. Please login again.');
         return;
     }
-    // Optional: Check if already declared locally to prevent unnecessary API calls
     if (drivableModels.includes(selectedModel)) {
         setModelDeclareMessage('You have already declared this model.');
         return;
@@ -239,13 +218,13 @@ function Drivers() {
     console.log('Declaring model', selectedModel, 'as drivable for', currentDriverInfo?.name);
 
     try {
-        const response = await fetch(`${API_URL}/drivers/drivable-models`, { // Use the new POST endpoint
+        const response = await fetch(`${API_URL}/drivers/drivable-models`, { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // Add JWT token
+                'Authorization': `Bearer ${token}` 
             },
-            body: JSON.stringify({ car_id: selectedModel }), // Send the selected CARID
+            body: JSON.stringify({ car_id: selectedModel }), 
         });
 
         const data = await response.json();
@@ -254,9 +233,8 @@ function Drivers() {
             setModelDeclareMessage(data.message || 'Model declared successfully!');
             // Add the model to the local state only on successful backend confirmation
             setDrivableModels([...drivableModels, selectedModel]);
-            setSelectedModel(''); // Clear selection after successful declaration
+            setSelectedModel(''); 
         } else {
-            // Handle specific errors like conflict (409) or others
             setModelDeclareMessage(`Failed to declare model: ${data.error || response.statusText}`);
         }
     } catch (error) {
@@ -266,16 +244,11 @@ function Drivers() {
   };
 
   const handleRemoveDrivableModel = (carId) => {
-    // TODO: Implement API call for removing a drivable model
     console.log('(Placeholder) Removing model', carId, 'from drivable list for', currentDriverInfo?.name);
-    // Optimistic UI update (remove immediately, revert on error if needed)
     setDrivableModels(drivableModels.filter(id => id !== carId));
   };
 
-  // UseEffect to fetch models when component loads (if needed, e.g., for a dropdown)
-  // useEffect(() => {
-  //   fetchAllCarModels();
-  // }, []);
+  
 
   return (
     <div className="component-content"> {/* Add a wrapper for content below image */}
