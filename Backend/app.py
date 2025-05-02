@@ -21,11 +21,11 @@ CORS(app)
 def get_db_connection():
   try:
       conn=psycopg2.connect(
-          dbname=os.getenv("DB_NAME"),
-          user=os.getenv("DB_USER"),
-          password=os.getenv("DB_PASSWORD"),
-          host=os.getenv("DB_HOST"),
-          port=os.getenv("DB_PORT")
+          dbname="taxi_rental",
+          user="postgres",
+          password="Manasa@5",
+          host="localhost",
+          port="5432"
       )
       return conn
   except Exception as e:
@@ -130,25 +130,18 @@ def login_manager():
 # --- Car Management Routes ---
 
 @app.route('/api/managers/cars', methods=['POST'])
-@jwt_required() # Protect this route
+@jwt_required()  # Protect this route
 def add_car():
-    # Authentication check is now handled by @jwt_required()
-    # We can get the identity of the logged-in manager if needed:
-    # from flask_jwt_extended import get_jwt_identity
-    # current_manager_ssn = get_jwt_identity()
-    # print(f"Request by manager SSN: {current_manager_ssn}")
-
-    # TODO: Add authentication check to ensure only logged-in managers can access
     data = request.get_json()
     make = data.get('make')
     model = data.get('model')
-    year_str = data.get('year') # Year might come as string
+    year_str = data.get('year')
 
     if not make or not model or not year_str:
-        return jsonify({"error": "Missing required fields (make, model, year)"}), 400
+        return jsonify({"error": "Missing required fields"}), 400
 
     try:
-        year = int(year_str) # Convert year to integer
+        year = int(year_str)
     except ValueError:
         return jsonify({"error": "Invalid year format, must be a number"}), 400
 
@@ -158,26 +151,40 @@ def add_car():
 
     cur = conn.cursor()
     try:
-
+        # Generate a unique CARID
         while True:
-            car_id = uuid.uuid4().hex[:10].upper() # CARID is VARCHAR(10)
+            car_id = uuid.uuid4().hex[:10].upper()
             cur.execute("SELECT CARID FROM CAR WHERE CARID = %s", (car_id,))
             if not cur.fetchone():
-                break # Found a unique ID
+                break  # Found a unique ID
 
+        # Insert into CAR table
         cur.execute(
             "INSERT INTO CAR (CARID, MAKE, MODEL, YEAR) VALUES (%s, %s, %s, %s)",
             (car_id, make, model, year)
         )
-        # Note: This doesn't handle the MODEL table yet based on schema complexity
+
+        # Generate a unique MODELID before inserting into MODEL table
+        while True:
+            model_id = uuid.uuid4().hex[:10].upper()
+            cur.execute("SELECT MODELID FROM MODEL WHERE MODELID = %s", (model_id,))
+            if not cur.fetchone():
+                break  # Found a unique ID
+
+        # Insert into MODEL table (Now model_id is defined)
+        cur.execute(
+            "INSERT INTO MODEL (MODELID, CARID, AUTO, MANUAL) VALUES (%s, %s, %s, %s)",
+            (model_id, car_id, True, False)
+        )
+
         conn.commit()
-        return jsonify({"message": "Car added successfully", "carId": car_id}), 201
+        return jsonify({"message": "Car and Model added successfully", "carId": car_id, "modelId": model_id}), 201
 
     except Exception as e:
         conn.rollback()
-        print(f"Error adding car: {e}")
-        # Check for specific errors, e.g., foreign key constraints if they exist
-        return jsonify({"error": f"Failed to add car: {e}"}), 500
+        print(f"Error adding car and model: {e}")
+        return jsonify({"error": f"Failed to add car and model: {e}"}), 500
+
     finally:
         cur.close()
         conn.close()
@@ -660,6 +667,482 @@ def get_driver_stats_report():
     except Exception as e:
         print(f"Error fetching driver stats report: {e}")
         return jsonify({"error": f"Failed to fetch driver stats report: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+from flask import request, jsonify
+from flask_jwt_extended import create_access_token, jwt_required
+import psycopg2
+
+@app.route('/api/drivers/login', methods=['POST'])
+def login_driver():
+    data = request.get_json()
+    name = data.get('name')  # Assuming login is based on name
+ 
+    if not name:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Check if the driver exists
+        # query = """SELECT * FROM DRIVER WHERE NAME = %s AND ROADNAME = %s AND NUMBER = %s AND CITY = %s"""
+        cur.execute("SELECT NAME AS name, ROADNAME AS roadname, CITY AS city, NUMBER AS number FROM DRIVER WHERE name=%s", (name,))
+        driver = cur.fetchone()
+        if driver:
+        # The keys in manager_dict will now be lowercase ('name', 'ssn', 'email') due to aliasing
+            driver_dict = dict(zip(["name", "roadname", "city", "number"], driver))
+        # --- Generate JWT Token --- Use SSN as the identity
+            access_token = create_access_token(identity=name)
+        # --- Return token along with success message and manager info ---
+            return jsonify(access_token=access_token, driver=driver_dict, message="Login successful"), 200
+        else:
+         return jsonify({"error": "Invalid ssn"}), 401
+
+        # Generate JWT token
+        # access_token = create_access_token(identity={"name": name})
+        # return jsonify({"message": "Login successful", "token": access_token}), 200
+
+    except Exception as e:
+        return jsonify({"error": f": {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/drivers/updateAddress', methods=['PUT'])
+def update_driver():
+    data = request.get_json()
+    name = data.get('name')
+    roadname = data.get('new_road')
+    number = data.get('new_num')
+    city = data.get('new_city')
+    zipcode = data.get('new_zip') # Optional based on schema, but good practice
+
+    # if not name or not roadname or not number or not city:
+    #     # Zipcode might be optional depending on needs, but let's require it here
+    #     return jsonify({"error": "Missing required fields (name, roadname, number, city, zipcode)"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error":"Database connection faild"}), 500 #internal server error
+
+    cur = conn.cursor()
+    try:
+        # Step 1: Upsert Address (Insert if not exists, do nothing if exists)
+        # Use the correct ON CONFLICT clause based on the primary key (ROADNAME, NUMBER, CITY)
+        address_update_query = """
+            INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (ROADNAME, NUMBER, CITY) DO UPDATE 
+            SET ZIPCODE = EXCLUDED.ZIPCODE
+            RETURNING ROADNAME, NUMBER, CITY, ZIPCODE;
+        """
+        cur.execute(address_update_query, (roadname, number, city, zipcode))
+
+        # Step 2: Insert Driver (Corrected INSERT statement)
+        driver_upert_query = """
+            UPDATE DRIVER
+            SET ROADNAME = %s, NUMBER = %s, CITY = %s\
+            WHERE NAME = %s
+            RETURNING NAME, ROADNAME, NUMBER, CITY;
+        """
+        cur.execute(driver_upert_query, (name, roadname, number, city))
+
+        conn.commit()
+        return jsonify({"message": "Driver added successfully"}), 201
+
+    except psycopg2.errors.UniqueViolation as e:
+        conn.rollback()
+        # Check if it's a violation on the DRIVER table (name)
+        # Use the clearer error message from previous version
+        if 'driver_pkey' in str(e).lower() or 'driver_name_key' in str(e).lower():
+             return jsonify({"error": f"Driver with name '{name}' already exists"}), 409
+        else:
+             print(f"Unique violation error adding driver: {e}")
+             return jsonify({"error": f"Failed to add driver due to unique constraint: {e}"}), 409
+
+    except Exception as e:
+        conn.rollback()
+        # Use the clearer error message from previous version
+        print(f"Error adding driver: {e}")
+        return jsonify({"error": f"Failed to add driver: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/clients/register', methods=['POST'])
+def client_manager():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    roadName = data.get('roadname')
+    number = data.get('number')
+    city = data.get('city')
+    zipcode = data.get('zipcode')
+    cardnumber = data.get('cardnumber')
+    expir = data.get('expir')
+    pin = data.get('cvv')
+
+    if not name or not email or not roadName or not number or not city or not cardnumber or not expir or not pin:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection Failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Step 1: Ensure the address exists before inserting the card
+        cur.execute("""
+            INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (ROADNAME, NUMBER, CITY) DO NOTHING;
+        """, (roadName, number, city, zipcode))
+
+        # Step 2: Insert the credit card
+        cur.execute("""
+            INSERT INTO CREDITCARD (CARDNUMBER, EXPIR, PIN, ROADNAME, NUMBER, CITY)
+            VALUES (%s, %s,  %s, %s, %s, %s)
+        """, (cardnumber, expir, pin, roadName, number, city))
+
+        # Step 3: Insert the client into the database
+        cur.execute("""
+            INSERT INTO CLIENT (CARDNUMBER, EXPIR, PIN, EMAIL, NAME, ROADNAME, NUMBER, CITY)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+        """, (cardnumber, expir, pin, email, name, roadName, number, city))
+
+        conn.commit()
+        return jsonify({"message": "Client registered successfully"}), 201
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error during client registration: {e}")  # Logs actual error for debugging
+        return jsonify({"error": f"Failed to register client: {e}"}), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/clients/login', methods=['POST'])
+def login_client():
+    data=request.get_json()
+    email=data.get('email')
+    if not email:
+        return jsonify({"error": "Missing required field email"}), 400
+    conn=get_db_connection()
+    if not conn:
+      return jsonify({"error": "Database connection failed"}), 500
+
+    cur=conn.cursor()
+    try:
+        # Check if the driver exists
+        # query = """SELECT * FROM DRIVER WHERE NAME = %s AND ROADNAME = %s AND NUMBER = %s AND CITY = %s"""
+        cur.execute("SELECT  EMAIL AS email, NAME as name FROM CLIENT WHERE email=%s", (email,))
+        client = cur.fetchone()
+        if client:
+        # The keys in manager_dict will now be lowercase ('name', 'ssn', 'email') due to aliasing
+            client_dict = dict(zip(["email", "name"], client))
+        # --- Generate JWT Token --- Use SSN as the identity
+            access_token = create_access_token(identity=email)
+        # --- Return token along with success message and manager info ---
+            return jsonify(access_token=access_token, client=client_dict, message="Login successful"), 200
+        else:
+         return jsonify({"error": "Invalid ssn"}), 401
+
+        # Generate JWT token
+        # access_token = create_access_token(identity={"name": name})
+        # return jsonify({"message": "Login successful", "token": access_token}), 200
+    except Exception as e:
+        return jsonify({"error": f": {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/models', methods=['GET'])
+def get_all_models():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT MODEL.MODELID, CAR.MAKE, CAR.MODEL, CAR.YEAR
+            FROM MODEL
+            JOIN CAR ON MODEL.CARID = CAR.CARID;
+        """)
+
+        models = cur.fetchall()
+
+        # Debugging Output
+        print("DEBUG: Retrieved models from database:", models)
+
+        if not models:
+            print("DEBUG: No models found in database.")  # Check why it's empty
+            return jsonify({"message": "No available car models"}), 200
+        
+        return jsonify([
+            {"id": row[0], "make": row[1], "model": row[2], "year": row[3]}
+            for row in models
+        ]), 200
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error fetching models: {e}")
+        return jsonify({"error": f"Failed to fetch car models: {e}"}), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/rents/checkAvailability', methods=['GET'])
+def check_availability():
+    check_date = request.args.get('date')
+
+    if not check_date:
+        return jsonify({"error": "Missing date parameter"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT DISTINCT CAR.CARID, CAR.MODEL, CAR.MAKE, CAR.YEAR
+            FROM CAR
+            JOIN MODEL ON CAR.CARID = MODEL.CARID
+            WHERE NOT EXISTS (
+                SELECT 1 FROM RENT 
+                WHERE RENT.CARID = CAR.CARID 
+                AND RENT.MODELID = MODEL.MODELID 
+                AND RENT.DATE = '2025-05-01'
+            );
+        """, (check_date,))
+
+        available_cars = cur.fetchall()
+        if not available_cars:
+            return jsonify({"message": "No available cars for this date"}), 200
+
+        # Debug Output
+        print("Available cars:", available_cars)  # Check query output
+
+        conn.commit()
+
+        return jsonify([
+            {"car_id": row[0], "make": row[2], "model": row[1], "year": row[3]}
+            for row in available_cars
+        ]), 200
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error checking availability: {e}")  # Print actual error
+        return jsonify({"error": f"Failed to check availability: {e}"}), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+def get_model_id(car_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # Query to find MODELID based on CARID
+        cur.execute("""
+            SELECT MODELID FROM MODEL
+            WHERE CARID = %s
+        """, (car_id,))
+
+        model_id = cur.fetchone()
+        if model_id:
+            return model_id[0]  # Extract MODELID from tuple
+        else:
+            return None  # No matching model found
+
+    except Exception as e:
+        print(f"Error retrieving MODELID: {e}")
+        return None
+
+    finally:
+        cur.close()
+        conn.close()
+
+def get_car_id(year, make, model):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # Query to find CARID based on year, make, and model
+        cur.execute("""
+            SELECT CARID FROM CAR
+            WHERE YEAR = %s AND MAKE = %s AND MODEL = %s
+        """, (year, make, model))
+
+        car_id = cur.fetchone()
+        if car_id:
+            return car_id[0]  # Extract CarID from tuple
+        else:
+            return None  # No matching car found
+
+    except Exception as e:
+        print(f"Error retrieving CarID: {e}")
+        return None
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/rents/book', methods=['POST'])
+def book_rent():
+    data = request.get_json()
+    rent_date = data.get("date")
+    email = data.get("email")
+    year = data.get("year")
+    make = data.get("make")
+    model = data.get("model")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # Fetch client name using email
+        # cur.execute("SELECT NAME FROM CLIENT WHERE EMAIL = %s", (email,))
+        # client_name = cur.fetchone()
+
+        # if not client_name:
+        #     return jsonify({"error": "Client not found"}), 404
+        
+        # client_name = client_name[0]
+
+        # Find car ID based on year, make, and model
+        car_id = get_car_id(year, make, model)
+
+        if not car_id:
+            return jsonify({"error": "Car not found"}), 404
+
+        # Find corresponding model ID
+        model_id = get_model_id(car_id)
+
+        if not model_id:
+            return jsonify({"error": "Model not found"}), 404
+
+        # **Check if the car is already booked for the selected date**
+        cur.execute("SELECT COUNT(*) FROM RENT WHERE CARID = %s AND DATE = %s", (car_id, rent_date))
+        rent_conflict = cur.fetchone()[0]
+
+        if rent_conflict > 0:
+            return jsonify({"error": "Car is already rented on this date"}), 409  # HTTP 409 Conflict
+
+        # **Find an available driver by referencing MODEL instead of DRIVER.MODELID**
+        cur.execute("""
+            SELECT D.NAME FROM DRIVER D 
+            JOIN MODEL M ON D.NAME = M.NAME
+            WHERE M.MODELID = %s LIMIT 1
+        """, (model_id,))
+        
+        driver_result = cur.fetchone()
+
+        if not driver_result:
+            return jsonify({"error": "No available drivers for this model"}), 404
+
+        driver_name = driver_result[0]  # Extract driver name
+
+        # Generate a unique RENTID
+        cur.execute("SELECT COALESCE(MAX(RENTID), 0) + 1 FROM RENT")
+        rent_id = cur.fetchone()[0]
+
+        # Insert rent record with Client, Driver, Car, and Model info
+        cur.execute(
+            "INSERT INTO RENT (RENTID, DATE, NAME, EMAIL, CARID, MODELID) VALUES (%s, %s, %s, %s, %s, %s)",
+            (rent_id, rent_date, driver_name, email, car_id, model_id)
+        )
+
+        conn.commit()
+        return jsonify({"message": f"Rent booked successfully! Assigned Driver: {driver_name}", "rentId": rent_id, "driverName": driver_name}), 201
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error booking rent: {e}")
+        return jsonify({"error": f"Failed to book rent: {e}"}), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# @app.route('/drivers/add-model', methods=['POST'])
+# def add_model_to_driver():
+#     data = request.get_json()
+#     driver_name = data.get("driver_name")
+#     model_id = data.get("model_id")
+
+#     if not driver_name or not model_id:
+#         return jsonify({"error": "Missing required fields"}), 400
+
+#     conn = get_db_connection()
+#     cur = conn.cursor()
+
+#     try:
+#         # Ensure the driver exists
+#         cur.execute("SELECT NAME FROM DRIVER WHERE NAME = %s", (driver_name,))
+#         driver_exists = cur.fetchone()
+
+#         if not driver_exists:
+#             return jsonify({"error": "Driver not found"}), 404
+
+#         # Update DRIVER table to associate driver with the model
+#         cur.execute("UPDATE DRIVER SET MODELID = %s WHERE NAME = %s", (model_id, driver_name))
+#         conn.commit()
+
+#         return jsonify({"message": f"Model {model_id} linked to driver {driver_name}"}), 200
+
+#     except Exception as e:
+#         conn.rollback()
+#         print(f"Error linking driver to model: {e}")
+#         return jsonify({"error": f"Failed to link driver: {e}"}), 500
+
+#     finally:
+#         cur.close()
+#         conn.close()
+
+from flask_cors import cross_origin
+
+@app.route('/api/models/assign-driver', methods=['OPTIONS', 'POST'])
+@cross_origin(origins=["http://localhost:5173"])  # Explicitly allow requests from frontend
+def assign_driver_to_model():
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS preflight successful"}), 200  # ✅ Respond to preflight request
+
+    data = request.get_json()
+    driver_name = data.get("driver_name")
+    model_id = data.get("model_id")
+
+    if not driver_name or not model_id:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # Ensure the model exists before updating
+        cur.execute("SELECT MODELID FROM MODEL WHERE MODELID = %s", (model_id,))
+        model_exists = cur.fetchone()
+
+        if not model_exists:
+            return jsonify({"error": "Model not found"}), 404
+
+        # Assign the driver's name to the model
+        cur.execute("UPDATE MODEL SET NAME = %s WHERE MODELID = %s", (driver_name, model_id))
+        conn.commit()
+
+        return jsonify({"message": f"Driver '{driver_name}' assigned to model '{model_id}'"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error assigning driver to model: {e}")
+        return jsonify({"error": f"Failed to assign driver: {e}"}), 500
+
     finally:
         cur.close()
         conn.close()

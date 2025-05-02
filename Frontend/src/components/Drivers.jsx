@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'; // Import hooks
 import './component.css'; // Add a CSS import for component-specific styles
 
+const API_URL = 'http://localhost:5000/api';
+
 function Drivers() {
   // State for Login
   const [loginName, setLoginName] = useState('');
@@ -9,6 +11,7 @@ function Drivers() {
 
   // State for Changing Address
   const [newAddress, setNewAddress] = useState('');
+  const [driverMessage, setDriverMessage] = useState(''); 
 
   // State for Car Models
   const [allCarModels, setAllCarModels] = useState([]); // List of all models
@@ -16,54 +19,198 @@ function Drivers() {
   const [selectedModel, setSelectedModel] = useState(''); // Model to add/remove from drivable list
 
   // --- Placeholder Handlers ---
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    //  setLoginMessage('');
     console.log('Logging in Driver:', loginName);
-    // TODO: API Call to backend to verify driver name
+     setDriverMessage(`trying`);
+    try {
+      const response = await fetch(`${API_URL}/drivers/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: loginName }),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setDriverMessage('Login successful!');
+        setIsLoggedIn(true);
+        // setManagerInfo(data.manager);
+        // --- Store the token --- (Use localStorage to persist across sessions)
+        localStorage.setItem('driver_access_token', data.access_token);
+        // setLoginSsn('');
+        setCurrentDriverInfo({ name: loginName, address: '123 Main St' }); // Simulate fetch
+        setNewAddress('123 Main St'); // Pre-fill address field
+        fetchAllCarModels(); // Fetch all models on login
+        // fetchDrivableModels(loginName)
+      } else {
+        setDriverMessage(`Login failed: ${data.error || response.statusText}`);
+        setIsLoggedIn(false);
+        // setManagerInfo(null);
+        localStorage.removeItem('driver_access_token'); // Ensure token is removed on failed login
+      }
+    } catch (error) {
+      console.error('Login network error:', error);
+      setDriverMessage('Login failed: Network error or server is down.');
+      setIsLoggedIn(false);
+      // setManagerInfo(null);
+      localStorage.removeItem('driver_access_token');
+    }    
     // On success, set login status and fetch driver info & models
-    setIsLoggedIn(true);
-    setCurrentDriverInfo({ name: loginName, address: '123 Main St' }); // Simulate fetch
-    setNewAddress('123 Main St'); // Pre-fill address field
-    fetchAllCarModels(); // Fetch all models on login
-    fetchDrivableModels(loginName); // Fetch models this driver can drive
+    // setIsLoggedIn(true);
+    ; // Fetch models this driver can drive
   };
 
-  const handleAddressChange = (e) => {
+
+  
+  const parseAddress = (address) => {
+    const parts = address.split(" ");
+    if (parts.length < 4) return null;
+  
+    return {
+      roadname: parts.slice(0, -3).join(" "),
+      number: parts[parts.length - 3],
+      city: parts[parts.length - 2],
+      zipcode: parts[parts.length - 1]
+    };
+  };
+  
+  const handleAddressChange = async (e) => {
     e.preventDefault();
-    console.log('Changing address for', currentDriverInfo?.name, 'to', newAddress);
-    // TODO: API call to backend to update address
-    setCurrentDriverInfo({ ...currentDriverInfo, address: newAddress }); // Update local state
+  
+    const parsedAddress = parseAddress(newAddress);
+    if (!parsedAddress) {
+      setDriverMessage("Invalid address format!");
+      return;
+    }
+  
+    console.log("Parsed Address:", parsedAddress);
+    setDriverMessage("Parsed Address:", parsedAddress);
+  
+    try {
+      const response = await fetch(`${API_URL}/drivers/updateAddress`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: currentDriverInfo?.name,
+          new_city: parsedAddress.city,
+          new_num: parsedAddress.number,
+          new_road: parsedAddress.roadname,
+          new_zip: parsedAddress.zipcode
+        }),
+      });
+  
+      const data = await response.json();
+      if (response.ok) {
+        console.log("Address updated successfully:", data.updated_address);
+        setDriverMessage("Address updated successfully:", data.updated_address);
+        setCurrentDriverInfo({ ...currentDriverInfo, ...parsedAddress });
+      } else {
+        console.error("Failed to update address:", data.error);
+        setDriverMessage("Failed to update address:", data.error);
+      }
+    } catch (error) {
+      console.error("Network error updating address:", error);
+      setDriverMessage("Network error updating address:", error);
+    }
   };
 
   // --- Car Model Functions ---
-  const fetchAllCarModels = () => {
-    console.log('Fetching all car models...');
-    // TODO: API Call to backend to get all models
-    // Simulate fetch
-    setAllCarModels([
-      { id: 1, make: 'Toyota', model: 'Camry', year: 2022 },
-      { id: 2, make: 'Honda', model: 'Civic', year: 2023 },
-      { id: 3, make: 'Ford', model: 'Mustang', year: 2021 },
-    ]);
-  };
+  const fetchAllCarModels = async () => {
+    console.log("Fetching all car models...");
+    
+    try {
+        const response = await fetch(`${API_URL}/models`);
+        const data = await response.json();
 
-  const fetchDrivableModels = (driverName) => {
-    console.log('Fetching drivable models for', driverName);
-    // TODO: API Call to backend to get models driverName can drive
-    // Simulate fetch
-    setDrivableModels([1]); // Assume driver can drive Toyota Camry (id 1)
-  };
-
-  const handleDeclareModel = (e) => {
-    e.preventDefault();
-    if (!selectedModel) return;
-    const modelId = parseInt(selectedModel);
-    console.log('Declaring model', modelId, 'as drivable for', currentDriverInfo?.name);
-    // TODO: API Call to backend to add model to driver's list
-    if (!drivableModels.includes(modelId)) {
-      setDrivableModels([...drivableModels, modelId]);
+        if (response.ok && Array.isArray(data)) {
+            setAllCarModels(data);
+        } else {
+            console.error("Invalid API response:", data);
+            setAllCarModels([]); // Set an empty array if response is invalid
+        }
+    } catch (error) {
+        console.error("Network error fetching car models:", error);
+        setAllCarModels([]); // Set an empty array in case of error
     }
-  };
+};
+const fetchDrivableModels = async (driverName) => {
+  console.log("Fetching drivable models for", driverName);
+
+  try {
+      const response = await fetch(`${API_URL}/models/no-drivers`);
+      const modelsWithoutDrivers = await response.json();
+
+      setDrivableModels(modelsWithoutDrivers); // Update state with filtered models
+  } catch (error) {
+      console.error("Error fetching models without drivers:", error);
+  }
+};
+  // const fetchDrivableModels = (driverName) => {
+  //   console.log('Fetching drivable models for', driverName);
+  //   // TODO: API Call to backend to get models driverName can drive
+  //   // Simulate fetch
+  //   setDrivableModels([1]); // Assume driver can drive Toyota Camry (id 1)
+  // };
+  const handleDeclareModel = async (e) => {
+    e.preventDefault();
+    if (!selectedModel || !currentDriverInfo?.name) {
+        console.error("Missing model or driver information.");
+        return;
+    }
+
+    const modelId = selectedModel;
+    const driverName = currentDriverInfo.name;
+
+    console.log(`Assigning driver '${driverName}' to model '${modelId}'`);
+
+    try {
+        // API call to assign the driver's name to the selected model
+        const response = await fetch(`${API_URL}/models/assign-driver`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                driver_name: driverName,
+                model_id: modelId,
+            }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            console.log(`Driver '${driverName}' successfully assigned to model '${modelId}'`);
+            if (!drivableModels.includes(modelId)) {
+                setDrivableModels([...drivableModels, modelId]);  // Update UI state
+            }
+        } else {
+            console.error("Failed to assign driver to model:", result.error);
+        }
+    } catch (error) {
+        console.error("Network error while declaring model:", error);
+    }
+};
+  // const handleDeclareModel = (e) => {
+  //   e.preventDefault();
+  //   if (!selectedModel) return;
+  //   const modelId = parseInt(selectedModel);
+  //   console.log('Declaring model', modelId, 'as drivable for', currentDriverInfo?.name);
+  //   // TODO: API Call to backend to add model to driver's list
+  //   if (!drivableModels.includes(modelId)) {
+  //     setDrivableModels([...drivableModels, modelId]);
+  //   }
+  // };
+  // const handleDeclareModel = (e) => {
+  //   e.preventDefault();
+  //   if (!selectedModel) return;
+  //   const modelId = parseInt(selectedModel);
+  //   console.log('Declaring model', modelId, 'as drivable for', currentDriverInfo?.name);
+  //   // TODO: API Call to backend to add model to driver's list
+  //   if (!drivableModels.includes(modelId)) {
+  //     setDrivableModels([...drivableModels, modelId]);
+  //   }
+  // };
 
   const handleRemoveDrivableModel = (modelId) => {
     console.log('Removing model', modelId, 'from drivable list for', currentDriverInfo?.name);
@@ -98,6 +245,7 @@ function Drivers() {
               <button type="submit">Login</button>
             </div>
           </form>
+          {/* {driverMessage && <p className={`message ${driverMessage.includes('Failed') || driverMessage.includes('Error') ? 'error' : 'success'}`}>{driverMessage}</p>} */}
         </div>
       ) : (
         // --- Logged In Driver Actions ---
@@ -118,6 +266,7 @@ function Drivers() {
                       <button type="submit">Update Address</button>
                   </div>
               </form>
+              {driverMessage && <p className={`message ${driverMessage.includes('Failed') || driverMessage.includes('Error') ? 'error' : 'success'}`}>{driverMessage}</p>}
            </div>
 
             {/* --- View All Models Section --- */}

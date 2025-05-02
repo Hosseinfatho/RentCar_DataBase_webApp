@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'; // Import hooks
 import './component.css'; // Add a CSS import for component-specific styles
-
+const API_URL = 'http://localhost:5000/api';
 function Clients() {
   // --- State Variables ---
   // Login/Register
@@ -32,63 +32,293 @@ function Clients() {
   const [reviewStatus, setReviewStatus] = useState('');
 
   // --- Placeholder Handlers ---
-  const handleLogin = (e) => {
+  // const handleLogin = (e) => {
+  //   e.preventDefault();
+  //   console.log('Logging in Client:', loginEmail);
+  //   // TODO: API Call to backend to verify email
+  //   // On success:
+  //   setIsLoggedIn(true);
+  //   setClientInfo({ name: 'Test Client', email: loginEmail }); // Simulate fetch
+  //   fetchBookedRents(loginEmail); // Fetch rents on login
+  // };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
+    //  setLoginMessage('');
     console.log('Logging in Client:', loginEmail);
-    // TODO: API Call to backend to verify email
-    // On success:
-    setIsLoggedIn(true);
-    setClientInfo({ name: 'Test Client', email: loginEmail }); // Simulate fetch
-    fetchBookedRents(loginEmail); // Fetch rents on login
+    //  setDriverMessage(`trying`);
+    try {
+      const response = await fetch(`${API_URL}/clients/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail }),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        // setDriverMessage('Login successful!');
+        setIsLoggedIn(true);
+        setClientInfo({ name: 'Test Client', email: loginEmail }); // Simulate fetch
+        fetchBookedRents(loginEmail); // Fetch rents on login
+        // setManagerInfo(data.manager);
+        // --- Store the token --- (Use localStorage to persist across sessions)
+        // localStorage.setItem('driver_access_token', data.access_token);
+        // setLoginSsn('');
+        // setCurrentDriverInfo({ name: loginName, address: '123 Main St' }); // Simulate fetch
+        // setNewAddress('123 Main St'); // Pre-fill address field
+        // fetchAllCarModels(); // Fetch all models on login
+        // fetchDrivableModels(loginName)
+      } else {
+        // setDriverMessage(`Login failed: ${data.error || response.statusText}`);
+        setIsLoggedIn(false);
+        // setManagerInfo(null);
+        localStorage.removeItem('driver_access_token'); // Ensure token is removed on failed login
+      }
+    } catch (error) {
+      console.error('Login network error:', error);
+      // setDriverMessage('Login failed: Network error or server is down.');
+      setIsLoggedIn(false);
+      // setManagerInfo(null);
+      localStorage.removeItem('driver_access_token');
+    }    
+    // On success, set login status and fetch driver info & models
+    // setIsLoggedIn(true);
+    ; // Fetch models this driver can drive
   };
 
-  const handleRegister = (e) => {
-    e.preventDefault();
-    console.log('Registering Client:', { name: regName, email: regEmail, address: regAddress, card: regCard });
-    // TODO: API Call to backend to register client
-    // On success, maybe log them in:
-    setIsLoggedIn(true);
-    setClientInfo({ name: regName, email: regEmail });
-    fetchBookedRents(regEmail);
+  const parseAddress = (address) => {
+    const parts = address.split(" ");
+    if (parts.length < 4) return null;
+  
+    return {
+      number: parts.slice(0, -3).join(" "),
+      roadname: parts[parts.length - 3],
+      city: parts[parts.length - 2],
+      zipcode: parts[parts.length - 1]
+    };
   };
 
-  const handleCheckAvailability = (e) => {
-    e.preventDefault();
-    console.log('Checking availability for date:', checkDate);
-    // TODO: API Call to backend to check available models on checkDate
-    // Simulate result:
-    setAvailableModels([
-      { id: 1, make: 'Toyota', model: 'Camry', year: 2022 },
-      { id: 2, make: 'Honda', model: 'Civic', year: 2023 },
-    ]);
-    setBookDate(checkDate); // Pre-fill booking date
+  const parseCard = (card) => {
+    const parts = card.split(" ");
+    if (parts.length < 3) return null;
+  
+    return {
+      cardnumber: parts[0], // First part before any space
+      expir: parts[1], // Second part (expiration date)
+      cvv: parts[2] // Third part (CVV)
+    };
   };
+  
 
-  const handleBookRent = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (!bookModelId || !bookDate) {
-      setBookingStatus('Please select a date and model first.');
+    // setRegMessage('');
+    // Include pincode in log message
+    const parsedAddress = parseAddress(regAddress);
+    if (!parsedAddress) {
+      // setDriverMessage("Invalid address format!");
       return;
     }
-    console.log('Booking rent for model:', bookModelId, 'on date:', bookDate);
-    // TODO: API Call to backend to book rent
-    // On success:
-    setBookingStatus(`Successfully booked model ${bookModelId} for ${bookDate}! Driver will be assigned.`);
-    fetchBookedRents(clientInfo?.email); // Refresh booked rents
-    // On failure:
-    // setBookingStatus('Failed to book rent. Model might no longer be available.');
-  };
 
-  const fetchBookedRents = (clientEmail) => {
-    if (!clientEmail) return;
-    console.log('Fetching booked rents for:', clientEmail);
-    // TODO: API Call to backend to get rents for this client
-    // Simulate result:
-    setBookedRents([
-      { rentId: 101, date: '2024-10-20', model: 'Toyota Camry', driver: 'Driver Dave' },
-      { rentId: 102, date: '2024-11-05', model: 'Honda Civic', driver: 'Driver Emma' },
-    ]);
+    const parsedCardInfo = parseCard(regCard);
+    if (!parsedCardInfo) {
+      // setDriverMessage("Invalid address format!");
+      return;
+    }
+
+    const clientData = {
+      name: regName,
+      email: regEmail,
+      roadname: parsedAddress.roadname,
+      number: parsedAddress.number,
+      city: parsedAddress.city,
+      zipcode: parsedAddress.zipcode,
+      cardnumber: parsedCardInfo.cardnumber,
+      expir: parsedCardInfo.expir,
+      cvv: parsedCardInfo.cvv,
+    };
+    console.log('Attempting to register Client:', clientData); // Mask pincode in log
+
+
+    try {
+      const response = await fetch(`${API_URL}/clients/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // --- Include pincode in the request body --- !!
+        body: JSON.stringify(clientData), // Include pincode
+      });
+
+      const data = await response.json();
+
+      if (response.ok) { // Status 201 Created
+        // Modify success message based on response or context if needed
+        // setRegMessage(data.message || 'Registration successful! You can now login.');
+        setRegName('');
+        setRegEmail('');
+        setRegAddress('');
+        setRegCard(''); // Clear pincode field
+      } else {
+         // Handle specific errors like 403 Forbidden (registration closed / invalid pincode)
+        //  setRegMessage(`Registration failed: ${data.error || response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Registration network error:', error);
+      // setRegMessage('Registration failed: Network error or server is down.');
+    }
   };
+  // const handleRegister = (e) => {
+  //   e.preventDefault();
+  //   console.log('Registering Client:', { name: regName, email: regEmail, address: regAddress, card: regCard });
+  //   // TODO: API Call to backend to register client
+  //   // On success, maybe log them in:
+  //   setIsLoggedIn(true);
+  //   setClientInfo({ name: regName, email: regEmail });
+  //   fetchBookedRents(regEmail);
+  // };
+  const handleCheckAvailability = async (e) => {
+    e.preventDefault();
+    console.log("Checking availability for date:", checkDate);
+
+    try {
+        const response = await fetch(`${API_URL}/rents/checkAvailability?date=${checkDate}`);
+        
+        const textResponse = await response.text(); // Capture raw response
+        console.log("Raw API Response:", textResponse);
+
+        try {
+            const availableCars = JSON.parse(textResponse);
+            if (response.ok) {
+                setAvailableModels(availableCars);
+                setBookDate(checkDate);
+            } else {
+                console.error("Failed to check availability:", availableCars.error);
+            }
+        } catch (jsonError) {
+            console.error("Failed to parse JSON:", textResponse);
+        }
+    } catch (error) {
+        console.error("Network error checking availability:", error);
+    }
+};
+
+// const handleBookRent = async (e) => {
+//   e.preventDefault();
+//   if (!bookModelId || !bookDate || !clientInfo?.email || !selectedDriver) {
+//       setBookingStatus("Please select a date, model, and ensure a driver is assigned.");
+//       return;
+//   }
+
+//   console.log("Booking rent for model:", bookModelId, "on date:", bookDate);
+
+//   try {
+//       const response = await fetch(`${API_URL}/rents/book`, {
+//           method: "POST",
+//           headers: { "Content-Type": "application/json" },
+//           body: JSON.stringify({
+//               model_id: bookModelId,
+//               date: bookDate,
+//               email: clientInfo.email,
+//               name: selectedDriver, // Ensure driver name is passed
+//           }),
+//       });
+
+//       const result = await response.json();
+
+//       if (response.ok) {
+//           setBookingStatus(`Successfully booked model ${bookModelId} for ${bookDate}! Driver ${selectedDriver} assigned.`);
+//           fetchBookedRents(clientInfo.email);
+//       } else {
+//           setBookingStatus(`Failed to book rent: ${result.error}`);
+//       }
+//   } catch (error) {
+//       setBookingStatus("Network error while booking rent. Please try again.");
+//       console.error("Network error booking rent:", error);
+//   }
+// };
+
+// const parseModelString = (bookModelID) => {
+//   const modelParts = bookModelID.split(" "); // Split by space
+//   const year = modelParts[0];  // First element is year
+//   const make = modelParts[1];  // Second element is make
+//   const model = modelParts.slice(2).join(" "); // Remaining elements form the model
+
+//   return { year, make, model };
+// };
+
+// const handleBookRent = async (e) => {
+//   e.preventDefault();
+//   if (!bookModelId || !bookDate || !clientInfo?.email) {
+//       setBookingStatus("Please select a date, model, and ensure you're logged in.");
+//       return;
+//   }
+//   const modelString = bookModelId; // Example input
+
+
+//   console.log("Booking rent for model:", bookModelId, "on date:", bookDate);
+
+//   try {
+//       const response = await fetch(`${API_URL}/rents/book`, {
+//           method: "POST",
+//           headers: {
+//               "Content-Type": "application/json",
+//           },
+//           body: JSON.stringify({
+//               year: year,
+//               make: make, 
+//               model: model,
+//               date: bookDate,
+//               email: clientInfo.email, // Assuming clientInfo contains user email
+//           }),
+//       });
+
+//       const result = await response.json();
+
+//       if (response.ok) {
+//           setBookingStatus(`Successfully booked model ${bookModelId} for ${bookDate}! Driver will be assigned.`);
+//           fetchBookedRents(clientInfo.email); // Refresh booked rents
+//       } else {
+//           setBookingStatus(`Failed to book rent: ${result.error}`);
+//       }
+//   } catch (error) {
+//       setBookingStatus("Network error while booking rent. Please try again.");
+//       console.error("Network error booking rent:", error);
+//   }
+// };
+//   // const handleBookRent = (e) => {
+  //   e.preventDefault();
+  //   if (!bookModelId || !bookDate) {
+  //     setBookingStatus('Please select a date and model first.');
+  //     return;
+  //   }
+  //   console.log('Booking rent for model:', bookModelId, 'on date:', bookDate);
+  //   // TODO: API Call to backend to book rent
+  //   // On success:
+  //   setBookingStatus(`Successfully booked model ${bookModelId} for ${bookDate}! Driver will be assigned.`);
+  //   fetchBookedRents(clientInfo?.email); // Refresh booked rents
+  //   // On failure:
+  //   // setBookingStatus('Failed to book rent. Model might no longer be available.');
+  // };
+//   const fetchBookedRents = async (clientEmail) => {
+//     if (!clientEmail) return;
+    
+//     console.log("Fetching booked rents for:", clientEmail);
+
+//     try {
+//         const response = await fetch(`${API_URL}/rents/client?email=${clientEmail}`);
+//         const rentsData = await response.json();
+
+//         if (response.ok) {
+//             setBookedRents(rentsData);
+//         } else {
+//             console.error("Failed to fetch booked rents:", rentsData.error);
+//             setBookedRents([]); // Set empty array if API fails
+//         }
+//     } catch (error) {
+//         console.error("Network error fetching booked rents:", error);
+//         setBookedRents([]); // Handle network failures safely
+//     }
+// };
+  
 
   const handleSubmitReview = (e) => {
     e.preventDefault();
@@ -105,14 +335,14 @@ function Clients() {
   };
 
   // Add handler for requirement 6 if needed
-  const handleBookBestDriver = (e) => {
-     e.preventDefault();
-     // Similar to handleBookRent, but with different backend endpoint/parameter
-     console.log('Booking rent with BEST driver for model:', bookModelId, 'on date:', bookDate);
-     // TODO: API call to backend
-     setBookingStatus(`Successfully booked model ${bookModelId} with BEST driver for ${bookDate}!`);
-     fetchBookedRents(clientInfo?.email);
-  }
+  // const handleBookBestDriver = (e) => {
+  //    e.preventDefault();
+  //    // Similar to handleBookRent, but with different backend endpoint/parameter
+  //    console.log('Booking rent with BEST driver for model:', bookModelId, 'on date:', bookDate);
+  //    // TODO: API call to backend
+  //    setBookingStatus(`Successfully booked model ${bookModelId} with BEST driver for ${bookDate}!`);
+  //    fetchBookedRents(clientInfo?.email);
+  // }
 
   return (
     <div className="component-content"> {/* Add a wrapper for content below image */}
@@ -191,7 +421,7 @@ function Clients() {
                          <div> {/* Button group */}
                             <button type="submit">Book Now</button>
                             {/* Add button for Req 6 if needed */}
-                            <button type="button" onClick={handleBookBestDriver} style={{marginLeft: '10px'}}>Book with Best Driver</button> 
+                            {/* <button type="button" onClick={handleBookBestDriver} style={{marginLeft: '10px'}}>Book with Best Driver</button>  */}
                          </div>
                      </div>
                  </form>
