@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './component.css'; // Add a CSS import for component-specific styles
 
 // Base URL for the backend API
-const API_URL = 'http://localhost:5000/api'; // Assuming backend runs on port 5000
+const API_URL = 'http://localhost:5001/api'; // Corrected port to 5001
 
 function Managers() {
   const [regName, setRegName] = useState('');
