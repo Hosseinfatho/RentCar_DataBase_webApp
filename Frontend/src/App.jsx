@@ -3,7 +3,7 @@ import './App.css'; // Default Vite App CSS
 import Managers from './components/Managers.jsx'; 
 import Clients from './components/Clients.jsx';
 import Drivers from './components/Drivers.jsx';
-import AboutModal from './components/AboutModal.jsx'; // Import the new modal component
+import AboutModal from './components/AboutModal.jsx';
 
 function App() {
   const [showAboutModal, setShowAboutModal] = useState(false);
@@ -12,7 +12,6 @@ function App() {
   const closeAboutModal = () => setShowAboutModal(false);
 
   return (
-    // Add relative positioning to allow absolute positioning of button inside
     <div className='App' style={{ position: 'relative' }}> 
       {/* Add About button */}
       <button className="about-button" onClick={openAboutModal}>About</button>

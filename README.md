@@ -10,7 +10,6 @@ psql -U postgres -d taxi_rental -f schema.sql
 
 *   `/Frontend`: Contains the React frontend application (built with Vite).
 *   `/Backend`: Contains the Flask backend application (details TBD).
-*   `/Frontend/public`: Static assets (like images) are served from here.
 *   `/Frontend/src`: Main source code for the React app.
     *   `/Frontend/src/components`: Reusable React components (Managers, Clients, Drivers).
 
@@ -32,6 +31,21 @@ psql -U postgres -d taxi_rental -f schema.sql
     ```
     This command uses Vite to build the app and serve it, usually at `http://localhost:5173`. Open this URL in your browser. The server will automatically update when you save changes to the source files.
 
-## Running the Backend
+1. **Navigate to Backend Directory:**
 
-(Instructions to be added)
+    ```bash
+    cd backend
+    ```
+2.  **Start Backend Development Server:**
+ # create python env
+ # active env
+    ```bash
+    SQL\Scripts\activate
+    python -m venv SQL
+    pip install -r requirements.txt
+    ```
+
+ 3.  **Run Server** 
+ ```bash
+    python app.py
+  ```

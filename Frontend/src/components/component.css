@@ -1,38 +1,36 @@
 /* Styles for component image layout */
 
 .section {
-  /* Make section a flex container to position image container and content */
   display: flex;
   flex-direction: column; 
-  padding: 0; /* Remove main padding if needed, apply to content instead */
+  padding: 0; 
 }
 
 .image-container {
   width: 100%;
-  height: 30%; /* Set height to 20% of the section's height */
-  overflow: hidden; /* Hide parts of image that don't fit */
-  flex-shrink: 0; /* Prevent image container from shrinking */
+  height: 30%; 
+  overflow: hidden; 
+  flex-shrink: 0;
 }
 
 .image-container img {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Scale image nicely to cover the container */
-  display: block; /* Remove extra space below image */
+  object-fit: cover; 
+  display: block;
 }
 
 .component-content {
-  padding: 20px; /* Add padding to the content area below image */
-  flex-grow: 1; /* Allow content area to fill remaining space */
-  overflow-y: auto; /* Add scroll to content if needed */
+  padding: 20px; 
+  flex-grow: 1; 
+  overflow-y: auto; 
 }
 
-/* Reset h2 margin as it's now inside component-content */
+
 .component-content h2 {
    margin-top: 0;
-   border-bottom: 2px solid #eee; /* Keep border */
-   padding-bottom: 10px; /* Keep padding */
-   /* Inherit colors from theme adjustments */
+   border-bottom: 2px solid #eee; 
+   padding-bottom: 10px; 
 }
 
 /* Adjust theme colors if needed */
@@ -47,13 +45,12 @@
   }
 }
 
-/* Style for input/button controls */
 .controls {
-  display: flex; /* Arrange input and button inline */
-  align-items: center; /* Align items vertically */
-  justify-content: flex-start; /* Align items to the left */
-  margin-top: 15px; /* Add some space above controls */
-  gap: 10px; /* Add space between number, input and button */
+  display: flex; 
+  align-items: center; 
+  justify-content: flex-start; 
+  margin-top: 15px; 
+  gap: 10px; 
 }
 
 .controls input[type="text"] {
@@ -68,23 +65,21 @@
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  background-color: inherit; /* Match background */
-  color: inherit; /* Match text color */
-  flex-grow: 1; /* Allow select to take available space */
+  background-color: inherit;
+  color: inherit; 
+  flex-grow: 1; 
 }
 
 .controls button {
-  /* Inherits button styles from index.css, add overrides if needed */
-  padding: 8px 15px; /* Adjust padding */
+  
+  padding: 8px 15px; 
 }
 
-/* Style for the number label */
 .control-number {
   font-weight: bold;
-  margin-right: 5px; /* Space after number */
+  margin-right: 5px;
 }
 
-/* Styles for new action sections */
 .action-section {
   margin-top: 25px;
   padding-top: 15px;
@@ -109,25 +104,25 @@
   color: #555;
 }
 
-/* Style for stacked controls */
+
 .controls.stacked {
   flex-direction: column;
-  align-items: stretch; /* Make inputs full width */
+  align-items: stretch; 
 }
 
 .controls.stacked input,
 .controls.stacked button,
-.controls.stacked div /* Button group */ {
-  width: 100%; /* Make elements take full width */
-  margin-bottom: 10px; /* Space between stacked elements */
+.controls.stacked div {
+  width: 100%; 
+  margin-bottom: 10px; 
 }
 
 .controls.stacked button:last-child,
-.controls.stacked div:last-child /* Button group */ {
+.controls.stacked div:last-child  {
   margin-bottom: 0;
 }
 
-/* Styles for results area */
+
 .results {
   margin-top: 15px;
   padding: 10px;
@@ -146,7 +141,6 @@
   padding-left: 20px;
 }
 
-/* Theme adjustments */
 @media (prefers-color-scheme: dark) {
   .action-section { border-top-color: #555; }
   .sub-action h4 { color: #aaa; }
@@ -161,8 +155,7 @@
 }
 
 :root {
-  /* Define color palette and spacing using CSS Variables */
-  --primary-color: #007bff; /* Example primary color */
+  --primary-color: #007bff;
   --primary-color-dark: #0056b3;
   --secondary-color: #6c757d;
   --success-color: #28a745;
@@ -210,7 +203,7 @@ body {
 
 .image-container {
   width: 100%;
-  max-height: 200px; /* Limit image height */
+  max-height: 200px; 
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -252,7 +245,7 @@ body {
 }
 
 .action-section:first-of-type {
-    margin-top: var(--spacing-lg); /* Less margin for the first section */
+    margin-top: var(--spacing-lg); 
 }
 
 .action-section h3 {
@@ -281,7 +274,7 @@ body {
 /* --- Forms & Controls --- */
 .controls {
   display: flex;
-  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  flex-wrap: wrap; 
   align-items: center;
   gap: var(--spacing-md);
 }
@@ -320,27 +313,12 @@ body {
   box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Subtle focus ring */
 }
 
-/* --- Buttons --- (Assuming global button styles exist, add specifics here) */
-/* If no global styles, define base button style here */
-/* .controls button, button { ... } */
-
 .controls button {
   padding: var(--spacing-sm) var(--spacing-lg);
-  /* Inherit global button styles or define here */
-   /* Example specific style if needed */
-   /* background-color: var(--primary-color); */
-   /* color: white; */
-   /* border: none; */
-   /* border-radius: var(--border-radius); */
-   /* cursor: pointer; */
-   /* transition: background-color 0.2s ease; */
+
 }
 
-/*
-.controls button:hover {
-   background-color: var(--primary-color-dark);
-}
-*/
+
 
 .controls.stacked button {
     margin-top: var(--spacing-sm);
@@ -419,14 +397,13 @@ table th {
 }
 
 table tbody tr:hover {
-    background-color: rgba(0, 0, 0, 0.05); /* Subtle hover */
+    background-color: rgba(0, 0, 0, 0.05); 
 }
 
-/* --- Dark Mode Adjustments --- */
 @media (prefers-color-scheme: dark) {
   .action-section {
     border-color: var(--border-color-dark);
-    background-color: var(--background-color-dark); /* Darker section background */
+    background-color: var(--background-color-dark); 
     box-shadow: var(--box-shadow-dark);
   }
   .sub-action h4 { color: #adb5bd; }
@@ -476,4 +453,71 @@ table tbody tr:hover {
       background-color: #6e2a31;
       border-color: #a83c46;
   }
+}
+
+.address-card-input-stacked {
+    display: flex;          
+    flex-direction: column;
+    gap: 8px;             
+    margin-bottom: 15px;  
+    max-width: 350px;     
+    width: 100%;          
+}
+
+.address-card-input-stacked input,
+.address-card-input-stacked button {
+    width: 100%;        
+    padding: 8px 10px; 
+    box-sizing: border-box; 
+}
+
+.address-card-input-stacked button {
+    margin-top: 5px; /* Add a little space above the button */
+}
+
+.item-list {
+    max-width: 350px; 
+    list-style: none;
+    padding: 0;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color-light); 
+    border-radius: var(--border-radius);
+    width: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  .item-list {
+    border: 1px solid var(--border-color-dark); 
+  }
+}
+
+.item-list li {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .item-list li {
+    border-bottom: 1px solid var(--border-color-dark); 
+  }
+}
+
+
+.item-list li:last-child {
+    border-bottom: none;
+}
+
+.remove-button {
+    background: none;
+    border: none;
+    color: var(--error-color); 
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0 5px;
+    margin-left: 10px; 
 } 

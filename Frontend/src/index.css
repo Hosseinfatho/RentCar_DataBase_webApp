@@ -28,17 +28,13 @@ html, body, #root {
   padding: 0; /* Remove default padding */
 }
 
-/* Explicitly target #root to ensure no margin/padding */
 #root {
   margin: 0 !important;
   padding: 0 !important;
 }
 
 body {
-  /* display: flex; /* Remove flex from body if not needed */
-  /* place-items: normal; /* Override from before */
-  /* min-width: 320px; /* Keep or remove based on design */
-  /* min-height: 100vh; /* Replaced by height: 100% */
+ 
 }
 
 h1 {
@@ -78,54 +74,46 @@ button:focus-visible {
   }
 }
 
-/* Make the main App component a flex container that takes full height */
 .App {
   display: flex;
-  flex-direction: column; /* Stack title and container vertically */
-  height: 100%; /* Make App fill its container (#root) */
+  flex-direction: column; 
+  height: 100%; 
   width: 100%;
-  border: 2px dotted red; /* Add temporary border for debugging */
-  box-sizing: border-box; /* Ensure border doesn't add to size */
+  border: 2px dotted red; 
+  box-sizing: border-box; 
 }
 
 /* Style the main H1 in App */
 .App > h1 {
     text-align: center;
-    padding: 10px 0; /* Add minimal vertical padding if needed, no horizontal */
+    padding: 10px 0; 
     flex-shrink: 0; 
     color: #646cff; 
-    background-color: #333; /* Example: Add background to see its bounds */
-    margin: 0; /* Explicitly remove all margins */
+    background-color: #333; 
+    margin: 0; 
 }
 
-/* Styles for horizontal sections - Full Width & Height */
 .container {
   display: flex;
   flex-direction: row; 
   padding: 0; 
   width: 100%; 
-  /* min-height: 80vh; /* Remove fixed min-height */
   flex-grow: 1; /* Allow container to grow and fill remaining vertical space */
   box-sizing: border-box; 
 }
 
 .section {
   border: 1px solid #ccc;
-  /* padding: 20px; /* REMOVED - Moved to .component-content */
   flex: 1; 
   box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
   background-color: #ffffff; 
   box-sizing: border-box; 
-  /* overflow-y: auto; /* REMOVED - Moved to .component-content */
-  /* ADDED flex properties from component.css */
+ 
   display: flex;
   flex-direction: column; 
 }
 
-/* Remove border from the last section if added */
-/* .section:last-child {
-  border-right: none;
-} */
+
 
 .section h2 {
   margin-top: 0;
@@ -133,7 +121,6 @@ button:focus-visible {
   padding-bottom: 10px;
 }
 
-/* Light theme adjustments for sections */
 @media (prefers-color-scheme: light) {
   .section {
     background-color: #f9f9f9;
@@ -145,11 +132,10 @@ button:focus-visible {
   }
   .App > h1 {
       color: #213547;
-      background-color: #eee; /* Adjust background for light mode */
+      background-color: #eee; 
   }
 }
 
-/* Dark theme adjustments for sections */
 @media (prefers-color-scheme: dark) {
   .section {
     background-color: #2e2e2e;
@@ -161,6 +147,6 @@ button:focus-visible {
   }
   .App > h1 {
       color: #909bff; 
-      background-color: #1a1a1a; /* Adjust background for dark mode */
+      background-color: #1a1a1a; 
   }
 }
