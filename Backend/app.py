@@ -202,26 +202,32 @@ def remove_car():
             return jsonify({"error": "No car found matching the criteria"}), 404 # Not Found
 
         car_id_to_delete = car_to_delete[0]
-        cur.execute("SELECT 1 FROM MODEL WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
-        if cur.fetchone():
-            return jsonify({"error": "Cannot remove car: It is referenced in the MODEL table. Remove associated models first."}), 409 # Conflict
-
+        # Check constraints that should prevent deletion (RENT)
         cur.execute("SELECT 1 FROM RENT WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
         if cur.fetchone():
             return jsonify({"error": "Cannot remove car: It is referenced in the RENT table. Remove associated rents first."}), 409 # Conflict
 
-        cur.execute("SELECT 1 FROM DRIVES WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
-        if cur.fetchone():
-            return jsonify({"error": "Cannot remove car: It is referenced in the DRIVES table. Remove associated driver assignments first."}), 409 # Conflict
+        # Remove the check for DRIVES table
+        # cur.execute("SELECT 1 FROM DRIVES WHERE CARID = %s LIMIT 1", (car_id_to_delete,))
+        # if cur.fetchone():
+        #     return jsonify({"error": "Cannot remove car: It is referenced in the DRIVES table. Remove associated driver assignments first."}), 409 # Conflict
 
+        # --- Delete associated DRIVES records FIRST ---
+        cur.execute("DELETE FROM DRIVES WHERE CARID = %s", (car_id_to_delete,))
+        print(f"Deleted {cur.rowcount} associated drives for CARID {car_id_to_delete}") # Optional log
+
+        # --- Delete associated MODEL records SECOND ---
+        cur.execute("DELETE FROM MODEL WHERE CARID = %s", (car_id_to_delete,))
+        print(f"Deleted {cur.rowcount} associated models for CARID {car_id_to_delete}") # Optional: Log how many models were deleted
+
+        # --- Then delete the CAR record THIRD ---
         cur.execute("DELETE FROM CAR WHERE CARID = %s", (car_id_to_delete,))
+        
+        # Commit the transaction only after all deletions are successful
         conn.commit()
 
-        if cur.rowcount > 0:
-            return jsonify({"message": f"Car (CARID: {car_id_to_delete}) removed successfully"}), 200
-        else:
-            # This case should ideally not happen due to the check above, but as a fallback
-            return jsonify({"error": "Car found but failed to remove"}), 500
+        if cur.rowcount > 0: # Check if the CAR record was deleted
+            return jsonify({"message": f"Car (CARID: {car_id_to_delete}), associated models, and driver assignments removed successfully"}), 200
 
     except Exception as e:
         conn.rollback()
@@ -798,6 +804,13 @@ def declare_drivable_model():
         
         model_id = model_result[0] # Extract MODELID
 
+        # --- Add check for NULL model_id --- 
+        if model_id is None:
+            conn.rollback() # Rollback since we cannot proceed
+            print(f"Error declaring drivable model: MODELID is NULL in MODEL table for CARID {car_id}")
+            # Return a specific error message
+            return jsonify({"error": f"Cannot declare drivable: Model details (MODELID) are missing for CARID {car_id} in the database."}), 500 # Internal Server Error might be appropriate
+
         # Step 2: Insert into DRIVES table
         insert_drives_query = """
             INSERT INTO DRIVES (NAME, MODELID, CARID)
@@ -826,6 +839,95 @@ def declare_drivable_model():
     finally:
         cur.close()
         conn.close()
+
+# --- Endpoint for a driver to get their own drivable models --- 
+@app.route('/api/drivers/me/drivable-models', methods=['GET'])
+@jwt_required()
+def get_my_drivable_models():
+    driver_name = get_jwt_identity() # Get driver name from JWT
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # Query to get details of cars the logged-in driver can drive
+        query = """
+            SELECT DISTINCT
+                d.CARID AS "carId", -- Alias to match frontend expectations often
+                c.MAKE AS make,
+                c.MODEL AS model_name, -- Alias if 'model' conflicts
+                c.YEAR AS year
+                -- Optionally include d.MODELID if needed by frontend
+                -- d.MODELID AS "modelId"
+            FROM DRIVES d
+            JOIN CAR c ON d.CARID = c.CARID
+            -- Optional: JOIN MODEL m ON d.MODELID = m.MODELID AND d.CARID = m.CARID (if you need model details like color)
+            WHERE d.NAME = %s
+            ORDER BY make, model_name, year;
+        """
+        cur.execute(query, (driver_name,))
+        drivable_cars = cur.fetchall()
+
+        # Convert Row objects to simple dictionaries
+        drivable_list = [dict(car) for car in drivable_cars]
+
+        # Return the list, perhaps under a key like 'drivable_models'
+        return jsonify({"drivable_models": drivable_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching drivable models for driver {driver_name}: {e}")
+        return jsonify({"error": f"Failed to fetch drivable models: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+# --- Endpoint for a driver to remove a model from their drivable list ---
+@app.route('/api/drivers/me/drivable-models/<string:car_id_to_remove>', methods=['DELETE'])
+@jwt_required()
+def remove_my_drivable_model(car_id_to_remove):
+    driver_name = get_jwt_identity() # Get driver name from JWT
+
+    if not car_id_to_remove:
+         return jsonify({"error": "Missing car ID in URL"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor()
+    try:
+        # Delete the specific entry from DRIVES table for this driver and car
+        # Note: This doesn't require MODELID, as CARID and NAME are sufficient keys in DRIVES 
+        # if we assume a driver declares the CAR, not specific MODELIDs separately.
+        # If the PK of DRIVES is (NAME, MODELID, CARID), we might need MODELID too, 
+        # but the declare function currently only associates with one MODELID per CARID.
+        delete_query = """
+            DELETE FROM DRIVES 
+            WHERE NAME = %s AND CARID = %s;
+        """
+        cur.execute(delete_query, (driver_name, car_id_to_remove))
+        
+        # Check if any row was actually deleted
+        if cur.rowcount == 0:
+            conn.rollback() # No changes needed
+            # It's possible the driver didn't have this car declared, or car_id was wrong
+            return jsonify({"error": "Model not found in drivable list or already removed"}), 404
+        
+        conn.commit() # Commit the deletion
+        # Return 204 No Content or a success message
+        # return jsonify({"message": "Model removed from drivable list successfully"}), 200
+        return '', 204 # Standard practice for successful DELETE with no body
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error removing drivable model {car_id_to_remove} for driver {driver_name}: {e}")
+        return jsonify({"error": f"Failed to remove drivable model: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 ###################################################################
 #Client API
 ########################################################################
@@ -849,10 +951,12 @@ def register_client():
 
     # --- Deeper Validation (Example: Check address/card structure) ---
     for addr in addresses:
+        # Use correct keys from frontend ('street', 'city', 'zip')
         if not all(k in addr for k in ('street', 'city', 'zip')):
              return jsonify({"error": f"Invalid address object structure: {addr}"}), 400
     for card in credit_cards:
          # Ensure billingAddress is present, even if other fields are simplified in frontend
+         # Use correct keys from frontend ('number', 'expiry', 'cvv', 'billingAddress')
          if not all(k in card for k in ('number', 'expiry', 'cvv', 'billingAddress')):
              return jsonify({"error": f"Invalid credit card object structure: {card}"}), 400
 
@@ -864,58 +968,82 @@ def register_client():
     cur = conn.cursor()
     try:
         # --- Check if Email already exists ---
-        cur.execute("SELECT CLIENTID FROM CLIENT WHERE EMAIL = %s", (email,))
+        # Use EMAIL as the primary key for CLIENT table check
+        cur.execute("SELECT 1 FROM CLIENT WHERE EMAIL = %s", (email,))
         if cur.fetchone():
             return jsonify({"error": "Client with this Email already exists"}), 409 # Conflict
 
-        # --- Generate unique CLIENTID ---
-        while True:
-            client_id = str(uuid.uuid4()) # Assuming CLIENTID is UUID or VARCHAR large enough
-            cur.execute("SELECT CLIENTID FROM CLIENT WHERE CLIENTID = %s", (client_id,))
-            if not cur.fetchone():
-                break
+        # --- Removed CLIENTID generation ---
+        # while True:
+        #     client_id = str(uuid.uuid4()) # Assuming CLIENTID is UUID or VARCHAR large enough
+        #     cur.execute("SELECT CLIENTID FROM CLIENT WHERE CLIENTID = %s", (client_id,))
+        #     if not cur.fetchone():
+        #         break
 
-        # --- Insert Client ---
-        cur.execute("INSERT INTO CLIENT (CLIENTID, NAME, EMAIL) VALUES (%s, %s, %s)",
-                    (client_id, name, email))
+        # --- Insert Client (only NAME and EMAIL) ---
+        cur.execute("INSERT INTO CLIENT (NAME, EMAIL) VALUES (%s, %s)",
+                    (name, email))
 
-        # --- Insert Addresses ---
+        # --- Insert Addresses (using EMAIL as FK) ---
         for addr in addresses:
-            # Generate unique ADDRESSID (assuming it's needed and not auto-increment)
-            # If ADDRESSID is auto-incrementing, remove this generation and the column from INSERT
-            while True:
-                address_id = str(uuid.uuid4()) # Or use appropriate generation
-                cur.execute("SELECT ADDRESSID FROM ADDRESS WHERE ADDRESSID = %s", (address_id,))
-                if not cur.fetchone():
-                    break
+            # ADDRESS table uses ROADNAME, NUMBER, CITY as PK, need to check if address itself exists?
+            # Let's assume ADDRESS can be duplicated but link it to the client via LIVES
+            # First insert into ADDRESS if it doesn't exist
+            # NOTE: This assumes ADDRESS is a shared table. If each client *must* have unique address text,
+            # the schema/logic needs adjustment. This example assumes ADDRESSES can be shared.
             cur.execute(
-                "INSERT INTO ADDRESS (ADDRESSID, CLIENTID, STREET, CITY, ZIP) VALUES (%s, %s, %s, %s, %s)",
-                (address_id, client_id, addr['street'], addr['city'], addr['zip'])
+                "INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE) VALUES (%s, %s, %s, %s) ON CONFLICT (ROADNAME, NUMBER, CITY) DO NOTHING",
+                (addr['street'], addr.get('number', 'N/A'), addr['city'], addr['zip']) # Handle potentially missing 'number'
+            )
+            # Then link client to the address via LIVES table
+            cur.execute(
+                "INSERT INTO LIVES (EMAIL, ROADNAME, NUMBER, CITY) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                (email, addr['street'], addr.get('number', 'N/A'), addr['city'])
             )
 
-        # --- Insert Credit Cards ---
+        # --- Insert Credit Cards (using EMAIL as FK) ---
         for card in credit_cards:
-            # Generate unique CARDID (assuming it's needed)
-            while True:
-                card_id = str(uuid.uuid4()) # Or use appropriate generation
-                cur.execute("SELECT CARDID FROM CREDITCARD WHERE CARDID = %s", (card_id,))
-                if not cur.fetchone():
-                    break
+            # CREDITCARD table PK is CARDNUMBER, uses EMAIL as FK to CLIENT
             # TODO: Consider encrypting card number and CVV before storing
+            # Use correct column name from schema: BILLING_ADDRESS? No, schema has FK to ADDRESS
+            # The schema seems to link CREDITCARD to ADDRESS via (ROADNAME, NUMBER, CITY), not a BILLING_ADDRESS text field.
+            # We need the address PK used for billing. Let's assume the *first* address added is the billing address for simplicity.
+            # A better approach would be to let the user select the billing address.
+            if not addresses: # Should not happen due to validation, but safety check
+                 conn.rollback()
+                 return jsonify({"error": "Cannot add credit card without an address"}), 400
+
+            billing_addr = addresses[0] # Assume first address is billing address
+            # Ensure the billing address exists in ADDRESS table first (might have been inserted above)
             cur.execute(
-                "INSERT INTO CREDITCARD (CARDID, CLIENTID, NUMBER, EXPIRY, CVV, BILLING_ADDRESS) VALUES (%s, %s, %s, %s, %s, %s)",
-                (card_id, client_id, card['number'], card['expiry'], card['cvv'], card['billingAddress'])
+                "INSERT INTO ADDRESS (ROADNAME, NUMBER, CITY, ZIPCODE) VALUES (%s, %s, %s, %s) ON CONFLICT (ROADNAME, NUMBER, CITY) DO NOTHING",
+                (billing_addr['street'], billing_addr.get('number', 'N/A'), billing_addr['city'], billing_addr['zip'])
+            )
+            # Now insert the credit card, linking to the client's EMAIL and the billing address PK
+            cur.execute(
+                "INSERT INTO CREDITCARD (CARDNUMBER, EMAIL, ROADNAME, NUMBER, CITY) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (CARDNUMBER) DO UPDATE SET EMAIL=EXCLUDED.EMAIL, ROADNAME=EXCLUDED.ROADNAME, NUMBER=EXCLUDED.NUMBER, CITY=EXCLUDED.CITY",
+                (card['number'], email, billing_addr['street'], billing_addr.get('number', 'N/A'), billing_addr['city'])
+                # Added ON CONFLICT to handle potential card number duplicates
             )
 
         # --- Commit Transaction ---
         conn.commit()
-        # TODO: Consider returning the created client ID or generating a JWT token for immediate login
-        return jsonify({"message": "Client registered successfully", "clientId": client_id}), 201
+        # Removed clientId from response
+        return jsonify({"message": "Client registered successfully"}), 201
 
-    except Exception as e:
+    except psycopg2.Error as db_err: # Catch specific database errors
         conn.rollback() # Rollback in case of any error
+        print(f"Database error during client registration: {db_err}")
+        # Provide more specific feedback if possible
+        if 'duplicate key value violates unique constraint "client_pkey"' in str(db_err):
+            return jsonify({"error": "Client with this Email already exists"}), 409
+        if 'duplicate key value violates unique constraint "creditcard_pkey"' in str(db_err):
+            # Consider if this should update or be an error
+            return jsonify({"error": "Credit card number already exists."}), 409
+        return jsonify({"error": f"Database error during registration: {db_err}"}), 500
+    except Exception as e:
+        conn.rollback()
         print(f"Error during client registration: {e}")
-        # Check for specific database errors if helpful (e.g., unique constraint violation)
         return jsonify({"error": f"Failed to register client: {e}"}), 500
     finally:
         cur.close()
@@ -926,11 +1054,10 @@ def register_client():
 def login_client():
     data = request.get_json()
     email = data.get('email')
-    # In a real app, you'd also need a password!
-    # password = data.get('password') # Assuming password was added during registration
+    # password = data.get('password') # If using password
 
     if not email: # or not password:
-        return jsonify({"error": "Missing required fields (email)"}), 400 # Add password if using
+        return jsonify({"error": "Missing required fields (email)"}), 400
 
     conn = get_db_connection()
     if not conn:
@@ -938,26 +1065,25 @@ def login_client():
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
-        # Fetch client by email
-        # In a real app, you'd also check the hashed password:
+        # Fetch client by email (PK)
         # cur.execute("SELECT CLIENTID, NAME, EMAIL, PASSWORD_HASH FROM CLIENT WHERE EMAIL = %s", (email,))
-        cur.execute("SELECT CLIENTID, NAME, EMAIL FROM CLIENT WHERE EMAIL = %s", (email,))
+        cur.execute("SELECT NAME, EMAIL FROM CLIENT WHERE EMAIL = %s", (email,)) # Select based on EMAIL PK
         client = cur.fetchone()
 
-        if client: # and check_password_hash(client['password_hash'], password): # Add password check
+        # if client and check_password_hash(client['password_hash'], password):
+        if client:
             client_data = dict(client)
-            # Use CLIENTID as the identity for the JWT token
-            access_token = create_access_token(identity=client_data['clientid'])
-            # Return token and client info (excluding sensitive data like password hash)
+            # Use EMAIL as the identity for the JWT token
+            access_token = create_access_token(identity=client_data['email'])
+            # Return token and client info (no clientId needed)
             client_info_for_frontend = {
-                "clientId": client_data["clientid"],
+                # "clientId": client_data["clientid"],
                 "name": client_data["name"],
                 "email": client_data["email"]
             }
             return jsonify(access_token=access_token, client=client_info_for_frontend, message="Login successful"), 200
         else:
-            # Generic error for security (don't reveal if email exists but password is wrong)
-            return jsonify({"error": "Invalid email or password"}), 401 # Unauthorized
+            return jsonify({"error": "Invalid email or password"}), 401
 
     except Exception as e:
         print(f"Error during client login: {e}")
@@ -988,42 +1114,58 @@ def get_available_cars():
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
+        print(f"--- Checking availability for date: {target_date} ---") # Log target date
+
+        # --- Log rented MODELIDs on target date ---
+        cur.execute("SELECT MODELID FROM RENT WHERE DATE = %s", (target_date,))
+        rented_modelids = [row['modelid'] for row in cur.fetchall()]
+        print(f"Rented MODELIDs on {target_date}: {rented_modelids}")
+
+        # --- Log busy DRIVERs on target date ---
+        cur.execute("SELECT NAME FROM RENT WHERE DATE = %s", (target_date,))
+        busy_drivers = [row['name'] for row in cur.fetchall()]
+        print(f"Busy drivers on {target_date}: {busy_drivers}")
+
         # Query to find available car models based on the criteria
-        # We need: CARID, MAKE, MODEL, YEAR, MODELID for booking later
+        # Removed DISTINCT for debugging, added DRIVER NAME
         query = """
-            SELECT DISTINCT
-                c.CARID AS id, -- Use CARID as the primary identifier for a specific car
+            SELECT 
+                c.CARID AS id,
                 c.MAKE AS make,
-                c.MODEL AS model,
+                c.MODEL AS model_name,
                 c.YEAR AS year,
-                m.MODELID AS modelId -- Include MODELID needed for booking/linking to DRIVES
-            FROM CAR c
-            JOIN MODEL m ON c.CARID = m.CARID
+                d.MODELID AS modelId,
+                d.NAME as driver_name
+            FROM DRIVES d
+            JOIN MODEL m ON d.MODELID = m.MODELID AND d.CARID = m.CARID
+            JOIN CAR c ON d.CARID = c.CARID
             WHERE
-                -- Condition i: Car (via MODEL) is not rented on the target date
-                m.MODELID NOT IN (
+                d.MODELID NOT IN (
                     SELECT MODELID FROM RENT WHERE DATE = %s
                 )
-                AND
-                -- Condition ii & iii combined: Exists at least one driver who can drive this model
-                -- AND is not driving another car on the target date.
-                EXISTS (
-                    SELECT 1
-                    FROM DRIVER dr
-                    JOIN DRIVES d ON dr.NAME = d.NAME
-                    WHERE
-                        d.MODELID = m.MODELID -- Driver can drive this specific model
-                        AND dr.NAME NOT IN ( -- Driver is not busy on the target date
-                            SELECT NAME FROM RENT WHERE DATE = %s
-                        )
+                AND d.NAME NOT IN (
+                    SELECT NAME FROM RENT WHERE DATE = %s
                 );
         """
-        # Pass the target date twice, once for each subquery check
+        print("Executing availability query...") # Log before query
         cur.execute(query, (target_date, target_date))
-        available_cars = cur.fetchall()
+        available_cars_raw = cur.fetchall() # Fetch raw rows
+        print(f"Query returned {len(available_cars_raw)} raw rows.") # Log row count
 
+        # --- Logging Raw Results --- 
+        print("--- Raw available cars data (after query) ---")
+        for i, row in enumerate(available_cars_raw):
+            print(f"Row {i}: {dict(row)}") # Print as dictionary for clarity
+            print(f"  -> modelId type: {type(row.get('modelid'))}, value: {row.get('modelid')}")
+        print("-------------------------------------------")
+        
         # Convert Row objects to simple dictionaries
-        available_models_list = [dict(car) for car in available_cars]
+        available_models_list = [dict(car) for car in available_cars_raw] # Use the raw data
+
+        # --- Logging Final List (before sending) --- 
+        print("--- Dict available cars data (before sending) ---")
+        print(available_models_list)
+        print("-----------------------------------------------")
 
         # Return in the structure expected by frontend { available_models: [...] }
         return jsonify({"available_models": available_models_list}), 200
@@ -1038,16 +1180,16 @@ def get_available_cars():
 @app.route('/api/clients/rents', methods=['POST'])
 @jwt_required()
 def book_rent():
-    client_id = get_jwt_identity() # Get CLIENTID from JWT token
+    # Use EMAIL from JWT token
+    client_email = get_jwt_identity()
     data = request.get_json()
 
-    model_id = data.get('modelId')
+    model_id = data.get('modelid') # Use lowercase 'modelid'
     rent_date_str = data.get('date')
 
     if not model_id or not rent_date_str:
-        return jsonify({"error": "Missing required fields: modelId and date"}), 400
+        return jsonify({"error": "Missing required fields: modelid and date"}), 400 # Update error message too
 
-    # --- Validate Date Format ---
     try:
         rent_date = date.fromisoformat(rent_date_str)
     except ValueError:
@@ -1059,22 +1201,20 @@ def book_rent():
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
-        # --- Start Transaction --- (psycopg2 implicitly starts one on first command)
-
+        # --- Start Transaction ---
         # --- Step 1: Verify Model Exists and Get CARID ---
         cur.execute("SELECT CARID FROM MODEL WHERE MODELID = %s", (model_id,))
         model_info = cur.fetchone()
         if not model_info:
-            return jsonify({"error": "Invalid model specified"}), 404 # Not Found
+            return jsonify({"error": "Invalid model specified"}), 404
         car_id = model_info['carid']
 
         # --- Step 2: Verify Model is NOT already Rented on this Date ---
         cur.execute("SELECT 1 FROM RENT WHERE MODELID = %s AND DATE = %s", (model_id, rent_date))
         if cur.fetchone():
-            return jsonify({"error": "This car model is already booked for the selected date"}), 409 # Conflict
+            return jsonify({"error": "This car model is already booked for the selected date"}), 409
 
         # --- Step 3: Find ONE Available Driver for this Model on this Date ---
-        # Find a driver who can drive the model (MODELID, CARID) and is not busy
         find_driver_query = """
             SELECT dr.NAME
             FROM DRIVER dr
@@ -1085,41 +1225,38 @@ def book_rent():
                 AND dr.NAME NOT IN (
                     SELECT NAME FROM RENT WHERE DATE = %s
                 )
-            LIMIT 1; -- Select only one arbitrary available driver
+            LIMIT 1;
         """
         cur.execute(find_driver_query, (model_id, car_id, rent_date))
         available_driver = cur.fetchone()
 
         if not available_driver:
-            # This case should ideally be prevented by the availability check, but double-check
-            return jsonify({"error": "No available driver found for this model on the selected date"}), 409 # Conflict
+            return jsonify({"error": "No available driver found for this model on the selected date"}), 409
 
         driver_name = available_driver['name']
 
-        # --- Step 4: Generate unique RENTID ---
-        while True:
-            rent_id = str(uuid.uuid4()) # Assuming RENTID is UUID or similar
-            cur.execute("SELECT RENTID FROM RENT WHERE RENTID = %s", (rent_id,))
-            if not cur.fetchone():
-                break
+        # --- Step 4: Generate unique RENTID (Schema uses INT, assuming SERIAL/auto-increment) ---
+        # If RENTID is not auto-incrementing, we need to generate it (e.g., using uuid)
+        # rent_id = str(uuid.uuid4())
 
-        # --- Step 5: Insert the Rent Record ---
-        # Adjust column names (CLIENTID, DATE, NAME, MODELID, CARID) as per your RENT table schema
+        # --- Step 5: Insert the Rent Record (using EMAIL for client FK) ---
+        # Adjust column names (EMAIL instead of CLIENTID)
         insert_rent_query = """
-            INSERT INTO RENT (RENTID, CLIENTID, DATE, NAME, MODELID, CARID)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO RENT (DATE, NAME, EMAIL, CARID, MODELID) -- Assuming RENTID auto-gen
+            VALUES (%s, %s, %s, %s, %s) RETURNING RENTID -- Get the generated RENTID
         """
-        cur.execute(insert_rent_query, (rent_id, client_id, rent_date, driver_name, model_id, car_id))
+        cur.execute(insert_rent_query, (rent_date, driver_name, client_email, car_id, model_id))
+        rent_id = cur.fetchone()['rentid'] # Fetch the returned RENTID
 
         # --- Commit Transaction ---
         conn.commit()
 
-        return jsonify({ "message": f"Rent booked successfully! Rent ID: {rent_id}, Driver: {driver_name}" }), 201 # Created
+        return jsonify({ "message": f"Rent booked successfully! Rent ID: {rent_id}, Driver: {driver_name}" }), 201
 
     except Exception as e:
-        conn.rollback() # Rollback transaction on any error
-        print(f"Error during booking by client {client_id}: {e}")
-        # Check for specific errors like foreign key violations if needed
+        conn.rollback()
+        # Use client_email in log message
+        print(f"Error during booking by client {client_email}: {e}")
         return jsonify({"error": f"Failed to book rent due to an internal error: {e}"}), 500
     finally:
         cur.close()
@@ -1128,7 +1265,8 @@ def book_rent():
 @app.route('/api/clients/rents', methods=['GET'])
 @jwt_required()
 def get_client_rents():
-    client_id = get_jwt_identity() # Get CLIENTID from JWT token
+    # Use EMAIL from JWT token
+    client_email = get_jwt_identity()
 
     conn = get_db_connection()
     if not conn:
@@ -1136,36 +1274,32 @@ def get_client_rents():
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
-        # Query to fetch rents for the logged-in client
-        # Join RENT with MODEL and CAR to get car details
+        # Query using EMAIL as the key for client
         query = """
-            SELECT 
-                r.RENTID AS "rentId",         -- Alias to match frontend expectation
-                r.DATE AS date,         -- Alias for date
-                r.NAME AS driver,            -- Driver's name from RENT table
-                CONCAT(c.YEAR, ' ', c.MAKE, ' ', c.MODEL) AS model -- Construct model string
+            SELECT
+                r.RENTID AS "rentId",
+                r.DATE AS date,
+                r.NAME AS driver,
+                CONCAT(c.YEAR, ' ', c.MAKE, ' ', c.MODEL) AS model
             FROM RENT r
             JOIN MODEL m ON r.MODELID = m.MODELID AND r.CARID = m.CARID
             JOIN CAR c ON m.CARID = c.CARID
-            WHERE r.CLIENTID = %s
-            ORDER BY r.DATE DESC; -- Order by date, newest first
+            WHERE r.EMAIL = %s -- Filter by client EMAIL
+            ORDER BY r.DATE DESC;
         """
-        cur.execute(query, (client_id,))
+        cur.execute(query, (client_email,))
         rents = cur.fetchall()
 
-        # Convert Row objects to simple dictionaries
         rents_list = [dict(rent) for rent in rents]
-        
-        # Ensure dates are strings in YYYY-MM-DD format (psycopg2 DictCursor might handle this)
         for rent_item in rents_list:
             if isinstance(rent_item['date'], date):
                 rent_item['date'] = rent_item['date'].isoformat()
 
-        # Return the list under the 'rents' key, as expected by frontend
         return jsonify({"rents": rents_list}), 200
 
     except Exception as e:
-        print(f"Error fetching rents for client {client_id}: {e}")
+        # Use client_email in log message
+        print(f"Error fetching rents for client {client_email}: {e}")
         return jsonify({"error": f"Failed to fetch rents: {e}"}), 500
     finally:
         cur.close()
@@ -1177,17 +1311,18 @@ def get_client_rents():
 @app.route('/api/clients/reviews', methods=['POST'])
 @jwt_required()
 def submit_review():
-    client_id = get_jwt_identity() # Get CLIENTID from JWT token
+    # Use EMAIL from JWT token
+    client_email = get_jwt_identity()
     data = request.get_json()
 
     driver_name = data.get('driverName')
     rating = data.get('rating')
-    comment = data.get('comment', '') # Optional comment, default to empty string
+    comment = data.get('comment', '') # Schema uses MESSAGE column
 
     # --- Input Validation ---
     if not driver_name:
         return jsonify({"error": "Missing required field: driverName"}), 400
-    if rating is None: # Check for None specifically, as 0 could be misinterpreted
+    if rating is None:
          return jsonify({"error": "Missing required field: rating"}), 400
     
     try:
@@ -1209,37 +1344,32 @@ def submit_review():
             return jsonify({"error": f"Driver '{driver_name}' not found."}), 404
 
         # --- Step 2: Check if Client actually rented with this Driver ---
+        # Use EMAIL for client check
         cur.execute(
-            "SELECT 1 FROM RENT WHERE CLIENTID = %s AND NAME = %s LIMIT 1", 
-            (client_id, driver_name)
+            "SELECT 1 FROM RENT WHERE EMAIL = %s AND NAME = %s LIMIT 1",
+            (client_email, driver_name)
         )
         if not cur.fetchone():
             return jsonify({"error": "Forbidden: You cannot review a driver you have not rented with."}), 403
 
-        # --- Step 3: Generate REVIEWID (if needed) and Insert Review ---
-        # If REVIEWID is auto-generated (SERIAL), remove it from INSERT.
-        while True:
-             review_id = str(uuid.uuid4()) # Assuming REVIEWID is UUID or similar
-             cur.execute("SELECT REVIEWID FROM REVIEW WHERE REVIEWID = %s", (review_id,))
-             if not cur.fetchone():
-                 break
-
+        # --- Step 3: Generate REVIEWID (Schema uses INT, assuming SERIAL/auto-increment) and Insert Review ---
+        # Use EMAIL for client FK, MESSAGE for comment text
         insert_review_query = """
-            INSERT INTO REVIEW (REVIEWID, CLIENTID, NAME, RATING, COMMENT)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO REVIEW (EMAIL, NAME, RATING, MESSAGE) -- Assuming REVIEWID auto-gen
+            VALUES (%s, %s, %s, %s) RETURNING REVIEWID
         """
-        # Use rating_int here
-        cur.execute(insert_review_query, (review_id, client_id, driver_name, rating_int, comment))
+        cur.execute(insert_review_query, (client_email, driver_name, rating_int, comment))
+        review_id = cur.fetchone()[0] # Get generated REVIEWID
 
         # --- Commit Transaction ---
         conn.commit()
 
-        return jsonify({"message": "Review submitted successfully!"}), 201 # Created
+        return jsonify({"message": "Review submitted successfully!"}), 201
 
     except Exception as e:
-        conn.rollback() # Rollback transaction on any error
-        print(f"Error submitting review by client {client_id} for driver {driver_name}: {e}")
-        # Consider more specific error handling (e.g., unique constraint if client reviewed same driver twice?)
+        conn.rollback()
+        # Use client_email in log message
+        print(f"Error submitting review by client {client_email} for driver {driver_name}: {e}")
         return jsonify({"error": f"Failed to submit review due to an internal error: {e}"}), 500
     finally:
         cur.close()
@@ -1248,16 +1378,16 @@ def submit_review():
 @app.route('/api/clients/rents/best-driver', methods=['POST'])
 @jwt_required()
 def book_rent_with_best_driver():
-    client_id = get_jwt_identity() # Get CLIENTID from JWT token
+    # Use EMAIL from JWT token
+    client_email = get_jwt_identity()
     data = request.get_json()
 
-    model_id = data.get('modelId')
+    model_id = data.get('modelid') # Use lowercase 'modelid'
     rent_date_str = data.get('date')
 
     if not model_id or not rent_date_str:
-        return jsonify({"error": "Missing required fields: modelId and date"}), 400
+        return jsonify({"error": "Missing required fields: modelid and date"}), 400 # Update error message too
 
-    # --- Validate Date Format ---
     try:
         rent_date = date.fromisoformat(rent_date_str)
     except ValueError:
@@ -1270,7 +1400,6 @@ def book_rent_with_best_driver():
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         # --- Start Transaction ---
-
         # --- Step 1: Verify Model Exists and Get CARID ---
         cur.execute("SELECT CARID FROM MODEL WHERE MODELID = %s", (model_id,))
         model_info = cur.fetchone()
@@ -1285,21 +1414,21 @@ def book_rent_with_best_driver():
 
         # --- Step 3: Find the Available Driver with the HIGHEST Average Rating ---
         find_best_driver_query = """
-            SELECT 
-                dr.NAME, 
-                COALESCE(AVG(rev.RATING), 0.0) AS avg_rating -- Use 0 if no reviews
+            SELECT
+                dr.NAME,
+                COALESCE(AVG(rev.RATING), 0.0) AS avg_rating
             FROM DRIVER dr
             JOIN DRIVES d ON dr.NAME = d.NAME
-            LEFT JOIN REVIEW rev ON dr.NAME = rev.NAME -- LEFT JOIN to include drivers with no reviews
+            LEFT JOIN REVIEW rev ON dr.NAME = rev.NAME
             WHERE
                 d.MODELID = %s
                 AND d.CARID = %s
                 AND dr.NAME NOT IN (
                     SELECT NAME FROM RENT WHERE DATE = %s
                 )
-            GROUP BY dr.NAME -- Group by driver to calculate AVG
-            ORDER BY avg_rating DESC, dr.NAME -- Order by rating descending (then name for tie-breaking)
-            LIMIT 1; -- Select the top one
+            GROUP BY dr.NAME
+            ORDER BY avg_rating DESC, dr.NAME
+            LIMIT 1;
         """
         cur.execute(find_best_driver_query, (model_id, car_id, rent_date))
         best_driver = cur.fetchone()
@@ -1308,21 +1437,17 @@ def book_rent_with_best_driver():
             return jsonify({"error": "No available driver found for this model on the selected date"}), 409
 
         driver_name = best_driver['name']
-        driver_rating = best_driver['avg_rating'] # For logging or potentially returning
+        driver_rating = best_driver['avg_rating']
 
-        # --- Step 4: Generate unique RENTID ---
-        while True:
-            rent_id = str(uuid.uuid4())
-            cur.execute("SELECT RENTID FROM RENT WHERE RENTID = %s", (rent_id,))
-            if not cur.fetchone():
-                break
+        # --- Step 4: Generate unique RENTID (Assuming SERIAL/auto-increment) ---
 
-        # --- Step 5: Insert the Rent Record ---
+        # --- Step 5: Insert the Rent Record (using EMAIL for client FK) ---
         insert_rent_query = """
-            INSERT INTO RENT (RENTID, CLIENTID, DATE, NAME, MODELID, CARID)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO RENT (DATE, NAME, EMAIL, CARID, MODELID) -- Assuming RENTID auto-gen
+            VALUES (%s, %s, %s, %s, %s) RETURNING RENTID
         """
-        cur.execute(insert_rent_query, (rent_id, client_id, rent_date, driver_name, model_id, car_id))
+        cur.execute(insert_rent_query, (rent_date, driver_name, client_email, car_id, model_id))
+        rent_id = cur.fetchone()['rentid'] # Get generated RENTID
 
         conn.commit()
 
@@ -1332,11 +1457,64 @@ def book_rent_with_best_driver():
 
     except Exception as e:
         conn.rollback()
-        print(f"Error during booking with best driver by client {client_id}: {e}")
+        # Use client_email in log message
+        print(f"Error during booking with best driver by client {client_email}: {e}")
         return jsonify({"error": f"Failed to book rent with best driver due to an internal error: {e}"}), 500
     finally:
         cur.close()
         conn.close()
+
+# ================= DEBUG ENDPOINT =================
+@app.route('/api/debug/availability-details', methods=['GET'])
+def debug_availability_details():
+    """
+    DEBUGGING Endpoint: Returns detailed info about cars, models, drivers,
+    and rent status for a specific date to help diagnose availability issues.
+    """
+    target_date_str = request.args.get('date')
+    if not target_date_str:
+        return jsonify({"error": "Missing required query parameter: date"}), 400
+
+    try:
+        target_date = date.fromisoformat(target_date_str)
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Please use YYYY-MM-DD."}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    debug_info = []
+    try:
+        # Query to get comprehensive details
+        query = """
+            SELECT
+                c.CARID, c.MAKE, c.MODEL AS CAR_MODEL, c.YEAR,
+                m.MODELID, m.COLOR,
+                d.NAME AS DRIVER_NAME,
+                r_model.DATE AS MODEL_RENT_DATE, -- Check if this specific MODELID is rented
+                r_driver.DATE AS DRIVER_RENT_DATE -- Check if this DRIVER is rented (for any car)
+            FROM CAR c
+            LEFT JOIN MODEL m ON c.CARID = m.CARID
+            LEFT JOIN DRIVES d ON m.MODELID = d.MODELID AND m.CARID = d.CARID
+            LEFT JOIN RENT r_model ON m.MODELID = r_model.MODELID AND r_model.DATE = %s
+            LEFT JOIN RENT r_driver ON d.NAME = r_driver.NAME AND r_driver.DATE = %s
+            ORDER BY c.MAKE, c.MODEL, c.YEAR, m.MODELID, d.NAME;
+        """
+        cur.execute(query, (target_date, target_date))
+        results = cur.fetchall()
+        debug_info = [dict(row) for row in results]
+
+        return jsonify({"debug_availability_details": debug_info}), 200
+
+    except Exception as e:
+        print(f"Error fetching debug availability details for date {target_date_str}: {e}")
+        return jsonify({"error": f"Failed to fetch debug details: {e}"}), 500
+    finally:
+        cur.close()
+        conn.close()
+# ================= END DEBUG ENDPOINT =================
 
 if __name__ == '__main__':
      host = os.getenv('FLASK_RUN_HOST', '127.0.0.1')

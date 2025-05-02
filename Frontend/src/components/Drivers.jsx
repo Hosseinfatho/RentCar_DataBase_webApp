@@ -54,7 +54,7 @@ function Drivers() {
             setLoginName(''); 
 
             fetchAllCarModels(); 
-            fetchDrivableModels(data.driver.name);
+            fetchDrivableModels();
         } else {
             setLoginMessage(`Login failed: ${data.error || response.statusText}`);
             setIsLoggedIn(false);
@@ -191,9 +191,41 @@ function Drivers() {
     }
   };
 
-  const fetchDrivableModels = (driverName) => {
-    console.log('(Placeholder) Fetching drivable models for', driverName);
-    setDrivableModels(['C001']); // Example placeholder
+  const fetchDrivableModels = async () => { 
+    console.log('Fetching drivable models for logged in driver...');
+    const token = localStorage.getItem('driver_access_token');
+
+    if (!token) {
+        console.error('Cannot fetch drivable models: No authentication token.');
+        setDrivableModels([]);
+        return; 
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/drivers/me/drivable-models`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log("Drivable models received:", data.drivable_models);
+            setDrivableModels(data.drivable_models || []); 
+        } else {
+            console.error('Failed to fetch drivable models:', response.status, response.statusText);
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Error details:', errorData);
+            setDrivableModels([]);
+            if (response.status === 401 || response.status === 422) {
+                handleLogout();
+            }
+        }
+    } catch (error) {
+        console.error('Network error fetching drivable models:', error);
+        setDrivableModels([]);
+    }
   };
 
   // --- Updated Declare Drivable Model Handler ---
@@ -231,11 +263,16 @@ function Drivers() {
 
         if (response.ok) {
             setModelDeclareMessage(data.message || 'Model declared successfully!');
-            // Add the model to the local state only on successful backend confirmation
-            setDrivableModels([...drivableModels, selectedModel]);
+            // Remove the model from the local state - Fetch instead
+            // setDrivableModels([...drivableModels, selectedModel]);
+            fetchDrivableModels(); // Refresh the list from the server
             setSelectedModel(''); 
         } else {
             setModelDeclareMessage(`Failed to declare model: ${data.error || response.statusText}`);
+            // If error is 409 (already declared), still refresh the list maybe?
+            if (response.status === 409) {
+                fetchDrivableModels();
+            }
         }
     } catch (error) {
         console.error('Declare model network error:', error);
@@ -243,9 +280,55 @@ function Drivers() {
     }
   };
 
-  const handleRemoveDrivableModel = (carId) => {
-    console.log('(Placeholder) Removing model', carId, 'from drivable list for', currentDriverInfo?.name);
-    setDrivableModels(drivableModels.filter(id => id !== carId));
+  const handleRemoveDrivableModel = async (carIdToRemove) => {
+    console.log('Attempting to remove model', carIdToRemove, 'from drivable list for', currentDriverInfo?.name);
+    setModelDeclareMessage(''); // Clear previous messages
+    const token = localStorage.getItem('driver_access_token');
+
+    if (!token) {
+        setModelDeclareMessage('Authentication error. Please login again.');
+        return;
+    }
+
+    // --- Optional: Confirmation Dialog ---
+    const modelInfo = allCarModels.find(m => m.id === carIdToRemove);
+    const confirmMessage = modelInfo 
+      ? `Are you sure you want to remove ${modelInfo.year} ${modelInfo.make} ${modelInfo.model} (ID: ${carIdToRemove}) from your drivable list?`
+      : `Are you sure you want to remove model ID ${carIdToRemove} from your drivable list?`;
+    
+    if (!window.confirm(confirmMessage)) {
+        setModelDeclareMessage('Removal cancelled.');
+        return;
+    }
+    // --- End Confirmation ---
+
+    try {
+        // We need a new DELETE endpoint: /api/drivers/me/drivable-models/{carId}
+        const response = await fetch(`${API_URL}/drivers/me/drivable-models/${carIdToRemove}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json().catch(() => ({})); // Catch errors for non-JSON responses (like 204 No Content)
+
+        if (response.ok) { // Includes 200 OK, 204 No Content
+            setModelDeclareMessage(data.message || 'Model removed from your drivable list successfully!');
+            fetchDrivableModels(); // Refresh the list from the server
+        } else {
+             setModelDeclareMessage(`Failed to remove model: ${data.error || response.statusText}`);
+             // Maybe refresh list even on error? Depends on desired behavior
+             fetchDrivableModels(); 
+        }
+
+    } catch (error) {
+        console.error('Remove drivable model network error:', error);
+        setModelDeclareMessage('Failed to remove model: Network error or server is down.');
+    }
+
+    // Original placeholder logic:
+    // setDrivableModels(drivableModels.filter(id => id !== carId));
   };
 
   
@@ -349,13 +432,15 @@ function Drivers() {
                 <div className="results sub-action">
                    <h4>Models You Can Drive:</h4>
                    <ul>
-                      {drivableModels.map(carId => {
-                         const modelInfo = allCarModels.find(m => m.id === carId);
-                         return modelInfo ? (
-                           <li key={carId}>
-                             {modelInfo.year} {modelInfo.make} {modelInfo.model} (ID: {modelInfo.id})
+                      {/* Iterate over the array of objects directly */}
+                      {drivableModels.map(drivableCar => { 
+                         // Check if drivableCar and its properties exist before rendering
+                         return drivableCar && drivableCar.carId ? (
+                           <li key={drivableCar.carId}> {/* Use carId from the object as key */}
+                             {/* Display info directly from the drivableCar object */} 
+                             {drivableCar.year} {drivableCar.make} {drivableCar.model_name} (ID: {drivableCar.carId})
                              <button 
-                               onClick={() => handleRemoveDrivableModel(carId)} 
+                               onClick={() => handleRemoveDrivableModel(drivableCar.carId)} 
                                style={{ marginLeft: '10px', fontSize: '0.8em', padding: '2px 5px' }}
                              >
                                Remove
