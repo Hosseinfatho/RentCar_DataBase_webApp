@@ -209,6 +209,19 @@ function Managers() {
         return;
     }
 
+    // --- Add Confirmation Dialog ---
+    const confirmRemove = window.confirm(
+      `Are you sure you want to remove the car ${carMake} ${carModel} (${carYear})? \n\nThis will also remove ALL associated model details (MODELIDs, colors, etc.) for this car.\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmRemove) {
+      setCarMessage("Removal cancelled by user.");
+      return; // Stop if user cancels
+    }
+    // --- End Confirmation Dialog ---
+
+    console.log('User confirmed removal for:', { make: carMake, model: carModel, year: carYear });
+
     try {
       const response = await fetch(`${API_URL}/managers/cars/remove`, {
         method: 'POST',
