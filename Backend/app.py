@@ -71,10 +71,19 @@ def register_manager():
         # General success message is appropriate
         return jsonify({"message": "Manager registered successfully"}), 201
 
+    except psycopg2.errors.UniqueViolation as e:
+        conn.rollback()
+        error_msg = str(e)
+        print(f"Unique violation error during manager registration: {error_msg}")
+        if 'manager_pkey' in error_msg.lower() or 'ssn' in error_msg.lower():
+            return jsonify({"error": "Manager with this SSN already exists"}), 409
+        elif 'email' in error_msg.lower():
+            return jsonify({"error": "Manager with this Email already exists"}), 409
+        return jsonify({"error": "Manager with this SSN or Email already exists"}), 409
     except Exception as e:
         conn.rollback()
         print(f"Error during manager registration: {e}")
-        return jsonify({"error": "Failed to register manager"}), 500
+        return jsonify({"error": f"Failed to register manager: {str(e)}"}), 500
     finally:
         cur.close()
         conn.close()
